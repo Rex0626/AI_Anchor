@@ -13,6 +13,6 @@ __pycache__/
 *.pyc
 
 # 日誌檔案
-log/
+logs/
 *.log
 

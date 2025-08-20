@@ -1,4 +1,4 @@
 # 忽略憑證資料夾
 credentials/
 *.mp4
-*.pt
+yolo/

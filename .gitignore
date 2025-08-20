@@ -9,10 +9,8 @@ credentials/
 yolo/
 
 # Python 暫存檔
-__pycache__/
 *.pyc
 
 # 日誌檔案
-logs/
 *.log
 

@@ -1,5 +1,18 @@
 # 忽略憑證資料夾
 credentials/
+
+# 大檔案
 *.mp4
 *.mp3
+
+# 物件檢測模型
 yolo/
+
+# Python 暫存檔
+__pycache__/
+*.pyc
+
+# 日誌檔案
+log/
+*.log
+

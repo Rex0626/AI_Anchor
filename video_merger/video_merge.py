@@ -39,6 +39,10 @@ def merge_videos(input_folder, output_video):
         total_duration = sum([clip.duration for clip in clips])
         print(f"🕒 合併後總時長預估：{total_duration:.2f} 秒")
 
+        # 🆕 確保輸出目錄存在
+        output_dir = os.path.dirname(output_video)
+        os.makedirs(output_dir, exist_ok=True)
+
         final_clip = concatenate_videoclips(clips, method="compose")
         final_clip.write_videofile(output_video, codec="libx264", audio_codec="aac")
 
@@ -64,7 +68,7 @@ def merge_videos(input_folder, output_video):
 
 # ✅ 後端單測模式
 if __name__ == "__main__":
-    input_folder = "D:/Vs.code/AI_Anchor/merge_audio/badminton_outputs"
+    input_folder = "D:/Vs.code/AI_Anchor/merge_audio/output_videos"
     output_video = "D:/Vs.code/AI_Anchor/video_merger/output/badminton_final_outputs.mp4"
 
     result = merge_videos(input_folder, output_video)

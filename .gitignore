@@ -4,6 +4,7 @@ credentials/
 # 大檔案
 *.mp4
 *.mp3
+*.json
 
 # 物件檢測模型
 yolo/

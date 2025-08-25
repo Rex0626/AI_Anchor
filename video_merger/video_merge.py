@@ -3,6 +3,9 @@ import sys
 from moviepy.editor import VideoFileClip, concatenate_videoclips
 
 def merge_videos(input_folder, output_video):
+    """
+    將資料夾中的影片合併為一個影片，回傳執行結果。
+    """
     print(f"📁 開始合併資料夾：{input_folder}")
 
     try:
@@ -12,8 +15,9 @@ def merge_videos(input_folder, output_video):
         ])
 
         if not video_files:
-            print("❌ 沒有找到任何影片，請檢查資料夾與副檔名！")
-            return
+            msg = "❌ 沒有找到任何影片，請檢查資料夾與副檔名！"
+            print(msg)
+            return {"status": "error", "message": msg}
 
         clips = []
         for file in video_files:
@@ -27,8 +31,9 @@ def merge_videos(input_folder, output_video):
                 continue
 
         if not clips:
-            print("❌ 所有影片都無法讀取，無法合併。")
-            return
+            msg = "❌ 所有影片都無法讀取，無法合併。"
+            print(msg)
+            return {"status": "error", "message": msg}
 
         print(f"\n📦 合併總片段數：{len(clips)}")
         total_duration = sum([clip.duration for clip in clips])
@@ -42,16 +47,25 @@ def merge_videos(input_folder, output_video):
             clip.close()
         final_clip.close()
 
-        print(f"\n🎉 ✅ 合併完成！輸出影片：{output_video}")
+        msg = f"🎉 ✅ 合併完成！輸出影片：{output_video}"
+        print(msg)
+        return {
+            "status": "success",
+            "output_video": output_video,
+            "total_segments": len(video_files),
+            "total_duration": total_duration
+        }
 
     except Exception as e:
         print(f"❌ 合併時發生錯誤：{e}")
         import traceback
         traceback.print_exc()
+        return {"status": "error", "message": str(e)}
 
+# ✅ 後端單測模式
 if __name__ == "__main__":
-    # 🛠️ 請根據實際需求修改以下兩個路徑：
     input_folder = "D:/Vs.code/AI_Anchor/merge_audio/badminton_outputs"
     output_video = "D:/Vs.code/AI_Anchor/video_merger/output/badminton_final_outputs.mp4"
 
-    merge_videos(input_folder, output_video)
+    result = merge_videos(input_folder, output_video)
+    print(result)

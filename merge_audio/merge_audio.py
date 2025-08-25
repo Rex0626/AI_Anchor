@@ -22,13 +22,13 @@ def merge_segment_video_with_audio(video_path, json_path, tts_dir, output_path, 
     commentary = data.get("commentary", [])
     if not commentary:
         print(f"⚠️ 沒有旁白內容：{json_path}")
-        return
+        return {"status": "skip", "segment": video_path, "reason": "no_commentary"}
 
     segment_name = os.path.splitext(os.path.basename(video_path))[0]
     segment_tts_folder = os.path.join(tts_dir, segment_name)
     if not os.path.exists(segment_tts_folder):
         print(f"⚠️ 沒有找到語音資料夾：{segment_tts_folder}")
-        return
+        return {"status": "skip", "segment": video_path, "reason": "tts_missing"}
 
     audio_clips = []
 
@@ -36,10 +36,8 @@ def merge_segment_video_with_audio(video_path, json_path, tts_dir, output_path, 
         start_time = time_str_to_seconds(sentence["start_time"])
         end_time = time_str_to_seconds(sentence["end_time"])
 
-        # 安全延遲語音開場，模仿主播反應
         adjusted_start = max(0, min(start_time + audio_delay, end_time - 0.2))
 
-        # 偵測語音檔路徑：000_*.mp3（例如 001_緊張.mp3）
         voice_file = None
         for f in os.listdir(segment_tts_folder):
             if f.startswith(f"{idx+1:03d}_") and f.endswith(".mp3"):
@@ -58,17 +56,20 @@ def merge_segment_video_with_audio(video_path, json_path, tts_dir, output_path, 
 
     if not audio_clips:
         print("❌ 沒有可用語音片段，跳過：", segment_name)
-        return
+        return {"status": "skip", "segment": video_path, "reason": "no_audio_clips"}
 
     final_audio = CompositeAudioClip(audio_clips)
     video = video.set_audio(final_audio)
     video.write_videofile(output_path, codec="libx264", audio_codec="aac")
     print(f"✅ 合併完成：{output_path}")
 
+    return {"status": "success", "segment": video_path, "output": output_path}
+
 # ✅ 批次處理所有影片片段
 def batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folder):
     os.makedirs(output_folder, exist_ok=True)
 
+    results = []
     video_files = [f for f in os.listdir(video_folder) if f.endswith(".mp4")]
     for file in sorted(video_files):
         base_name = os.path.splitext(file)[0]
@@ -78,16 +79,20 @@ def batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folde
 
         if not os.path.exists(json_path):
             print(f"⚠️ 找不到對應 JSON：{json_path}")
+            results.append({"status": "skip", "segment": video_path, "reason": "json_missing"})
             continue
 
-        merge_segment_video_with_audio(video_path, json_path, tts_folder, output_path)
+        result = merge_segment_video_with_audio(video_path, json_path, tts_folder, output_path)
+        results.append(result)
+
+    return {"status": "done", "results": results}
 
 # ✅ 主程式
 if __name__ == "__main__":
-    # ⚠️ 全部使用 segment_* 結構！
     video_folder = "D:/Vs.code/AI_Anchor/video_splitter/badminton_segments"
     json_folder = "D:/Vs.code/AI_Anchor/gemini/batch_badminton_outputs"
     tts_folder = "D:/Vs.code/AI_Anchor/TextToSpeech/emotional_outputs"
     output_folder = "D:/Vs.code/AI_Anchor/merge_audio/output_videos"
 
-    batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folder)
+    result = batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folder)
+    print(json.dumps(result, ensure_ascii=False, indent=2))

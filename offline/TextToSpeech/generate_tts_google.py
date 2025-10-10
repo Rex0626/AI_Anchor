@@ -4,10 +4,11 @@ import re
 from google.cloud import texttospeech
 
 # ========== 憑證載入、設定 ==========
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b7105f6a.json")
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+cred_path = os.path.join(os.path.dirname(os.path.dirname(PROJECT_ROOT)), "credentials", "ai-anchor-462506-7887b7105f6a.json")
 assert os.path.exists(cred_path), f"❌ 憑證不存在: {cred_path}"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
+
 
 client = texttospeech.TextToSpeechClient()
 
@@ -70,8 +71,16 @@ def process_segment_json(json_path, output_base_dir):
     os.makedirs(segment_dir, exist_ok=True)
 
     results = []
+    seen_texts = set()
     for idx, item in enumerate(commentary):
         emotion, text = clean_emotion_tag(item["text"])
+
+        # 新增重複檢查
+        if text in seen_texts:
+            print(f"⚠️ 重複旁白，跳過：{text}")
+            continue
+
+        seen_texts.add(text)    # 記錄已處理過的文本
         out_path = os.path.join(segment_dir, f"{idx+1:03d}_{emotion}.mp3")
         res = synthesize_sentence(text, emotion, out_path)
         results.append(res)
@@ -92,7 +101,7 @@ def batch_process(input_json_folder, output_folder):
 
 # ✅ 後端單測模式
 if __name__ == "__main__":
-    input_folder = "D:/Vs.code/AI_Anchor/gemini/batch_badminton_outputs"
-    output_folder = "D:/Vs.code/AI_Anchor/TextToSpeech/emotional_outputs"
+    input_folder = "D:/Vs.code/AI_Anchor/offline/gemini/batch_badminton_outputs"
+    output_folder = "D:/Vs.code/AI_Anchor/offline/TextToSpeech/emotional_outputs"
     result = batch_process(input_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

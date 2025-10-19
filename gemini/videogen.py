@@ -59,30 +59,34 @@ class GeminiGenerator:
 
 # ========== Prompt ==========
 prompt_template = """ 
-你是一位專業的運動主播，正在為一段羽球比賽影片撰寫逐段旁白。
+你是一位**資深的羽球賽事即時分析員與主播**，正在為一段羽球比賽影片撰寫逐段旁白。
 
-🎯 你的任務：根據影片內容，每 5 秒產出一句旁白，自然描述場上正在發生的動作與事件。
+🎯 你的任務：
+1. **分析畫面**：透過影片分析，辨識選手的具體動作與擊球路徑。
+2. **撰寫旁白**：根據分析結果，以專業主播的口吻，**每 {{ time_interval }} 秒為一個播報時段**，針對時段內發生的重要事件撰寫旁白。
 
 📌 撰寫規則如下：
-1. 這段影片總長度為 {{ duration }} 秒，因此你只需撰寫 {{ sentence_count }} 句旁白。
-2. 不用回覆，不需額外說明，也不要重述規則，直接產出旁白句子，共 {{ sentence_count }} 句。
-3. 每句格式為：「【情緒】角色 + 動作 + 事件」
-4. 情緒標籤為：【平穩】、【緊張】、【激動】
-5. 特別事件（如：開球、結束、失誤、得分）必須描述。
+1. 這段影片總長度為 {{ duration }} 秒，因此你只需撰寫旁白。
+2. **內容必須精確點名選手、描述明確的擊球動作（如：高球、跳殺、網前放小球）及球的落點。**
+3. 每句旁白必須**簡潔有力**，字數請控制在**25個中文字內**，以確保播報流暢度。
+4. 每句格式為：「【情緒】**[隊伍/球員名]** + **[具體動作]** + **[結果]**」
+5. 情緒標籤為：【平穩】、【緊張】、【激動】
 6. 可加入「漂亮一擊！」「精彩救球！」等情緒詞。
+7. 不用回覆，不需額外說明，直接產出旁白句子。**句子數量請自行判斷（可少於 {{ sentence_count }} 句），但不可多於 {{ sentence_count }} 句**。
 
-📽️ 影片背景資料如下：
+📽️ 影片背景資料如下（包含隊伍與球員資訊）：
 {{ intro }}
 
-📜 目前為止的旁白內容如下：
-{{ context }}
+🔄 **上一個片段的結尾動作（請確保本段旁白與之銜接）：**
+{{ last_action }}
+# 👆 新增：實現片段間的連貫性。
 
-請繼續為這段影片撰寫旁白：
+請為這段影片撰寫旁白：
  """
 
 prompt_builder = PromptBuilder(
     template=prompt_template,
-    required_variables=["intro", "context", "duration", "sentence_count"]
+    required_variables=["intro", "last_action", "duration", "sentence_count", "time_interval"]
 )
 
 # ========== Pipeline ==========
@@ -111,27 +115,39 @@ def process_video_segments(video_folder, output_folder, intro_text):
     video_files = sorted([f for f in os.listdir(video_folder) if f.endswith(".mp4")])
     results = []
 
+    # <<<< 新增這行：初始化連貫性變數 >>>>
+    last_segment_summary = "賽事畫面開始。"
+
     for file_name in video_files:
         segment_path = os.path.join(video_folder, file_name)
         with VideoFileClip(segment_path) as clip:
             duration = round(clip.duration)
-            sentence_count = max(1, duration // 5)
+            
+            # <<<< 修改點 A：定義並使用更長的安全間隔 >>>>
+            TIME_INTERVAL = 8 # 將間隔從 5 秒增加到 8 秒，緩解語音重疊
+            sentence_count = max(1, duration // TIME_INTERVAL) # 計算句子數量的安全上限
 
         prompt_input = {
             "upload2gcs": {"file_path": segment_path},
             "prompt_builder": {
                 "intro": intro_text,
-                "context": "",
+                "last_action": last_segment_summary, # <<<< 傳遞連貫性變數 >>>>
                 "duration": duration,
-                "sentence_count": sentence_count
+                "sentence_count": sentence_count,
+                "time_interval": TIME_INTERVAL # <<<< 傳遞時間間隔給 Prompt >>>>
             }
         }
 
         result = pipeline.run(prompt_input)
+
         reply = result["llm"]["replies"][0].strip()
         commentary_lines = [line.strip() for line in reply.split("\n") if line.strip()]
 
-        per_line_duration = duration / len(commentary_lines)
+        if not commentary_lines:
+             continue
+        
+        # <<<< 確保使用實際產生的行數來計算 per_line_duration >>>>
+        per_line_duration = duration / len(commentary_lines) 
         commentary_with_time = []
         for idx, line in enumerate(commentary_lines):
             start = idx * per_line_duration
@@ -141,6 +157,9 @@ def process_video_segments(video_folder, output_folder, intro_text):
                 "end_time": seconds_to_timecode(end),
                 "text": line
             })
+        
+        # <<<< 新增這行：更新連貫性變數 >>>>
+        last_segment_summary = commentary_with_time[-1]["text"]
 
         segment_obj = {
             "segment": file_name,

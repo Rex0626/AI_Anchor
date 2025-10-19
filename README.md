@@ -1,26 +1,24 @@
-# AI_Anchor 🎙️ AI 主播系統 — 後端模組
+# 🎙️ 賽場之聲 - 多模態融合即時賽事解說平台
 
-本專案能將運動賽事影片自動化轉換為文字解說與語音播報。  
+## 專案總覽 (Project Overview)
 
-流程包含：
-
-1. **影片切割**  
-2. **YOLO 物件偵測與追蹤、MediaPipe 動作辨識**  
-3. **LLM 文字生成**  
-4. **TTS 語音合成**  
-5. **最終輸出完整的 AI 播報結果**  
-
-> 此系統特別針對視障者與冷門賽事設計。
+本專案是一個創新的**多模態 AI 賽事解說平台**，旨在將運動賽事影片自動化轉換為專業的文字解說與富有情感的語音播報。
 
 ---
 
-## 對應資料夾說明
+### 📦 專案結構與模組職責
 
-| 流程 | 資料夾 |
-|------|--------|
-| 影片切割 | `video_splitter` |
-| 物件偵測、追蹤與動作辨識 | `detection` |
-| LLM 文字生成 | `gemini` |
-| 語音生成 | `TextToSpeech` |
-| 文字、語音、影片合併 | `merge_audio` |
-| 影片片段合併 | `video_merge` |
+| 資料夾 | 職責 | 核心技術 |
+|---|---|---|
+| `backend/` | **AI 核心模組**：負責影片處理、視覺分析、LLM 旁白生成、TTS 語音合成及影片最終合併。 | Python, YOLOv8, Gemini LLM |
+| `frontend/` | **使用者介面**：預留給網頁、應用程式或操作介面。 | [待定：React/Vue/etc.] |
+| `tools/` | **輔助工具**：例如影片下載工具等。 | |
+
+---
+
+### 🚀 快速入門 (Quick Start for All Team Members)
+
+1. **複製專案**：
+   ```bash
+   git clone [https://github.com/Rex0626/AI_Anchor_backend](https://github.com/Rex0626/AI_Anchor_backend)_
+   cd AI_Anchor_backend_

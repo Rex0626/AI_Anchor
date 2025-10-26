@@ -5,7 +5,7 @@ from google.cloud import texttospeech
 
 # ========== 憑證載入、設定 ==========
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-cred_path = os.path.join(os.path.dirname(os.path.dirname(PROJECT_ROOT)), "credentials", "ai-anchor-462506-7887b7105f6a.json")
+cred_path = os.path.join(os.path.dirname(PROJECT_ROOT), "credentials", "ai-anchor-462506-7887b7105f6a.json")
 assert os.path.exists(cred_path), f"❌ 憑證不存在: {cred_path}"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
@@ -101,7 +101,7 @@ def batch_process(input_json_folder, output_folder):
 
 # ✅ 後端單測模式
 if __name__ == "__main__":
-    input_folder = "D:/Vs.code/AI_Anchor/offline/gemini/batch_badminton_outputs"
-    output_folder = "D:/Vs.code/AI_Anchor/offline/TextToSpeech/emotional_outputs"
+    input_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
+    output_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/emotional_outputs"
     result = batch_process(input_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

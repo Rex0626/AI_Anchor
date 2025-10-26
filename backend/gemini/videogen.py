@@ -7,7 +7,7 @@ from haystack_integrations.components.generators.google_vertex import VertexAIGe
 from haystack import component, Pipeline
 from haystack.components.builders import PromptBuilder
 from google.cloud import storage
-
+from tqdm  import tqdm
 
 # ========== 憑證載入 ==========
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -118,7 +118,7 @@ def process_video_segments(video_folder, output_folder, intro_text):
     # <<<< 新增這行：初始化連貫性變數 >>>>
     last_segment_summary = "賽事畫面開始。"
 
-    for file_name in video_files:
+    for file_name in tqdm(video_files, desc="[AI主播] 處理影片片段"):
         segment_path = os.path.join(video_folder, file_name)
         with VideoFileClip(segment_path) as clip:
             duration = round(clip.duration)

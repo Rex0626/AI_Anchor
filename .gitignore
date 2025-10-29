@@ -5,6 +5,7 @@ credentials/
 *.mp4
 *.mp3
 *.json
+*.hash
 
 # 物件檢測模型
 yolo/

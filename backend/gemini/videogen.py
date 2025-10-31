@@ -127,7 +127,7 @@ def process_video_segments(video_folder, output_folder, intro_text):
             duration = round(clip.duration)
             
             # <<<< 修改點 A：定義並使用更長的安全間隔 >>>>
-            TIME_INTERVAL = 8 # 將間隔從 5 秒增加到 8 秒，緩解語音重疊
+            TIME_INTERVAL = 10 # 將間隔從 5 秒增加到 10 秒，緩解語音重疊
             sentence_count = max(1, duration // TIME_INTERVAL) # 計算句子數量的安全上限
 
         prompt_input = {

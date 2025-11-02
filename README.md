@@ -7,6 +7,7 @@
 ---
 ##所需工具
 AIP_KEY:AIzaSyDoAC6ks_fa4kSV_zhjvR4UaZUI1WRYqGM
+---
 專案ID:sports-broadcast-system
 
 ##執行步驟:

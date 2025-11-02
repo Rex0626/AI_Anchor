@@ -1,25 +1,16 @@
-# 🎙️ 賽場之聲 - 多模態融合即時賽事解說平台
+# React + Vite
 
-## 專案總覽 (Project Overview)
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-本專案是一個創新的**多模態 AI 賽事解說平台**，旨在將運動賽事影片自動化轉換為專業的文字解說與富有情感的語音播報。
+Currently, two official plugins are available:
 
----
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-### 📦 專案結構與模組職責
+## React Compiler
 
-| 資料夾 | 職責 | 核心技術 |
-|---|---|---|
-| `backend/` | **AI 核心後段模組**：負責影片處理、視覺分析、LLM 旁白生成、TTS 語音合成及影片最終合併。 | Python, YOLOv8, Gemini LLM |
-| `frontend/` | **使用者介面**：預留給網頁、應用程式或操作介面。 | [待定：React/Vue/etc.] |
-| `Live/` | **及時處理模組**：預留給及時處理的部分。 | [待定：Live API] |
-| `tools/` | **輔助工具**：例如影片下載工具等。 | |
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
----
+## Expanding the ESLint configuration
 
-### 🚀 快速入門 (Quick Start for All Team Members)
-
-1. **複製專案**：
-   ```bash
-   git clone [https://github.com/Rex0626/AI_Anchor](https://github.com/Rex0626/AI_Anchor)_
-   cd AI_Anchor
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

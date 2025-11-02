@@ -12,5 +12,7 @@ AIP_KEY:AIzaSyDoAC6ks_fa4kSV_zhjvR4UaZUI1WRYqGM
 專案ID:sports-broadcast-system
 
 ##執行步驟:
+---
 1.執行Connect.py #連接Live API 
+
 2.執行run_broadcast.py

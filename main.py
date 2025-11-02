@@ -3,18 +3,18 @@
 import os
 
 # 檔案與路徑設定
-VIDEO_PATH = "very_long.mp4" # 您的原始影片檔案名稱
+VIDEO_PATH = "輸入的影片.mp4" # 您的原始影片檔案名稱
 PLAN_FILE = "plan.json"
 AUDIO_OUTPUT_DIR = "generated_audio"
-OUTPUT_VIDEO_PATH = "broadcast_video.mp4"
+OUTPUT_VIDEO_PATH = "輸出的影片.mp4"
 MODEL_TEXT_GEN = "gemini-2.5-flash"
 
 # === 您的 API KEY 設定 ===
 # !!! 請將此處替換為您的實際 Gemini API Key !!!
-API_KEY = "AIzaSyDoAC6ks_fa4kSV_zhjvR4UaZUI1WRYqGM" 
+API_KEY = "您自己的API" 
 
 # === Google Cloud / Vertex AI 設定 ===
-PROJECT_ID = "sports-broadcast-system"  # <--- 請替換成您的 Project ID
+PROJECT_ID = "您自己的Project ID"  # <--- 請替換成您的 Project ID
 LOCATION = "asia-east1"                  
 
 # TTS (Text-to-Speech) 設定
@@ -50,4 +50,5 @@ PROMPT = """
     },
     // ... 所有片段都應包含在這個單一的 JSON 結構中
   ]
+
 }"""

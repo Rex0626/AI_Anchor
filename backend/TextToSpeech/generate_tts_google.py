@@ -1,19 +1,18 @@
 import os
 import json
 import re
+import html
 from google.cloud import texttospeech
-import hashlib
 
 # ========== 憑證載入、設定 ==========
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-cred_path = os.path.join(os.path.dirname(PROJECT_ROOT), "credentials", "ai-anchor-462506-7887b7105f6a.json")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b7105f6a.json")
 assert os.path.exists(cred_path), f"❌ 憑證不存在: {cred_path}"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
-
 client = texttospeech.TextToSpeechClient()
 
-# 情緒到語速(rate)和音量(volume_gain_db)的映射
+# 🎭 情緒對應參數（語速與音量）
 EMOTION_TTS_PARAMS = {
     "激動": {"rate": 1.5, "volume_gain_db": 3.5},
     "平穩": {"rate": 1.0, "volume_gain_db": 0.0},
@@ -23,25 +22,29 @@ EMOTION_TTS_PARAMS = {
     "精彩": {"rate": 1.5, "volume_gain_db": 3.0},
 }
 
+# 🧩 從文本中取出情緒標籤與正文
 def clean_emotion_tag(text):
     m = re.match(r"【(.+?)】(.*)", text)
     if m:
         return m.group(1), m.group(2).strip()
     else:
-        return "平穩", text  # 沒標籤就當平穩
+        return "平穩", text.strip()
 
+# 🗣 產生單句語音（Google TTS）
 def synthesize_sentence(sentence_text, emotion, output_path, voice="cmn-TW-Wavenet-A"):
     params = EMOTION_TTS_PARAMS.get(emotion, EMOTION_TTS_PARAMS["平穩"])
-    
-    # 1. 將中文標點替換成 SSML 停頓標籤
-    ssml_text = sentence_text
-    ssml_text = ssml_text.replace("，", "<break time='200ms'/>") # 逗號：短暫停頓/換氣
-    ssml_text = ssml_text.replace("、", "<break time='100ms'/>") # 頓號：極短停頓
-    ssml_text = ssml_text.replace("。", "<break time='400ms'/>") # 句號：正常語氣結束
-    ssml_text = ssml_text.replace("！", "<break time='500ms'/>") # 驚嘆號：較長且有力的停頓
-    
-    # 2. 使用處理後的 ssml_text 組合最終的 SSML 字串
-    ssml = f"<speak><prosody rate='{params['rate']}' volume='{params['volume_gain_db']}dB'>{ssml_text}</prosody></speak>"
+
+    # 轉義 SSML 特殊符號
+    clean_text = html.escape(sentence_text.strip())
+    if not clean_text:
+        print(f"⚠️ 空白文本，略過生成：{output_path}")
+        return {"status": "skip", "output": output_path}
+
+    ssml = (
+        f"<speak>"
+        f"<prosody rate='{params['rate']}' volume='{params['volume_gain_db']}dB'>"
+        f"{clean_text}</prosody></speak>"
+    )
 
     synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
     voice_params = texttospeech.VoiceSelectionParams(
@@ -57,14 +60,28 @@ def synthesize_sentence(sentence_text, emotion, output_path, voice="cmn-TW-Waven
             voice=voice_params,
             audio_config=audio_config,
         )
+
+        # 檢查音訊內容是否為空
+        if not response.audio_content:
+            print(f"⚠️ API 回傳空音訊，跳過：{output_path}")
+            return {"status": "empty", "output": output_path}
+
         with open(output_path, "wb") as f:
             f.write(response.audio_content)
-        print(f"✅ 生成語音：{output_path}")
+
+        # 檢查檔案大小
+        if os.path.getsize(output_path) == 0:
+            print(f"⚠️ 生成後檔案為空：{output_path}")
+            return {"status": "empty", "output": output_path}
+
+        print(f"✅ 生成語音（{emotion}）→ {output_path}")
         return {"status": "success", "output": output_path, "emotion": emotion}
+
     except Exception as e:
         print(f"❌ 語音生成失敗：{output_path}，錯誤：{e}")
         return {"status": "error", "message": str(e), "output": output_path}
 
+# 🎯 單一 segment 的 TTS 處理邏輯
 def process_segment_json(json_path, output_base_dir):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -80,60 +97,32 @@ def process_segment_json(json_path, output_base_dir):
 
     segment_dir = os.path.join(output_base_dir, segment_name)
     os.makedirs(segment_dir, exist_ok=True)
-
     results = []
-    seen_texts = set()
+
     for idx, item in enumerate(commentary):
-        emotion, text = clean_emotion_tag(item["text"])
+        try:
+            emotion, text = clean_emotion_tag(item.get("text", ""))
+            out_path = os.path.join(segment_dir, f"{idx+1:03d}.mp3")
 
-        # 1. 計算當前文本的 SHA256 雜湊值
-        text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
-        
-        # 2. 定義 MP3 檔案和伴隨的雜湊檔案路徑
-        out_path_mp3 = os.path.join(segment_dir, f"{idx+1:03d}_{emotion}.mp3")
-        out_path_hash = os.path.join(segment_dir, f"{idx+1:03d}_{emotion}.hash") # 伴隨雜湊檔案
+            # 檢查是否已有音檔
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                print(f"🟡 已存在且有效，略過：{out_path}")
+                continue
 
-        # 3. 檢查跳過條件 (只有 MP3 和 Hash 文件都存在且雜湊匹配時才跳過)
-        is_mp3_present = os.path.exists(out_path_mp3)
-        is_hash_present = os.path.exists(out_path_hash)
-
-        should_regenerate = True
-        
-        if is_mp3_present and is_hash_present:
-            with open(out_path_hash, 'r', encoding='utf-8') as hf:
-                stored_hash = hf.read().strip()
-            
-            if stored_hash == text_hash:
-                print(f"✅ 語音已存在且文本未修改，跳過生成：{out_path_mp3}")
-                should_regenerate = False
-            else:
-                print(f"⚠️ 文本已修改，需要重新生成語音：{out_path_mp3}")
-        
-        if not should_regenerate:
-            continue # 跳過 TTS API 呼叫
-
-        # 4. 原有的重複文本檢查 (防止同一 JSON 內重複生成)
-        if text in seen_texts:
-            print(f"⚠️ 重複旁白，跳過：{text}")
-            continue
-
-        seen_texts.add(text)
-        
-        # 5. 執行語音生成 (如果文件不存在或雜湊不匹配)
-        res = synthesize_sentence(text, emotion, out_path_mp3) 
-        
-        # 6. 如果生成成功，儲存新的雜湊值到 .hash 檔案
-        if res['status'] == 'success':
-            with open(out_path_hash, 'w', encoding='utf-8') as hf:
-                hf.write(text_hash)
-            
-        results.append(res)
+            res = synthesize_sentence(text, emotion, out_path)
+            results.append(res)
+        except Exception as e:
+            print(f"❌ 處理失敗（{item.get('text', '')}）：{e}")
 
     return {"status": "success", "segment": segment_name, "results": results}
 
+# 🚀 批次處理所有 JSON
 def batch_process(input_json_folder, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     json_files = [f for f in os.listdir(input_json_folder) if f.endswith(".json")]
+    if not json_files:
+        print("⚠️ 沒有可用 JSON 檔案")
+        return {"status": "warning", "message": "no_json_files"}
 
     all_results = []
     for jf in sorted(json_files):
@@ -143,9 +132,9 @@ def batch_process(input_json_folder, output_folder):
 
     return {"status": "success", "processed_files": len(json_files), "details": all_results}
 
-# ✅ 後端單測模式
+# ✅ 單獨測試執行模式
 if __name__ == "__main__":
-    input_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
-    output_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/emotional_outputs"
+    input_folder = "D:/Vs.code/AI_Anchor/gemini/batch_badminton_outputs"
+    output_folder = "D:/Vs.code/AI_Anchor/TextToSpeech/emotional_outputs"
     result = batch_process(input_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

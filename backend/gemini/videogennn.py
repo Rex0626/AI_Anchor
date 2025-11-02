@@ -8,15 +8,16 @@ from haystack import component, Pipeline
 from haystack.components.builders import PromptBuilder
 from google.cloud import storage
 
+
 # ========== 憑證載入 ==========
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b7105f6a.json")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
-
 # ✅ 工具函數
 def seconds_to_timecode(seconds):
     return str(timedelta(seconds=round(seconds)))
+
 
 
 # ========== 組件 ==========
@@ -34,15 +35,15 @@ class Upload2GCS:
         blob.upload_from_filename(file_path)
         return {"uri": f"gs://{self.bucket_name}/{file_name}"}
 
-
 @component
 class AddVideo2Prompt:
-    @component.output_types(uri=str, prompt=str)
+    @component.output_types(uri=str, text=str)
     def run(self, uri: str, prompt: str):
         return {
             "uri": uri,
-            "prompt": prompt
+            "text": prompt
         }
+
 
 
 @component
@@ -53,16 +54,13 @@ class GeminiGenerator:
         self.model = model
 
     @component.output_types(replies=list)
-    def run(self, uri: str, prompt: str):
+    def run(self, prompt: list):
         generator = VertexAIGeminiGenerator(
             project_id=self.project_id,
             location=self.location,
             model=self.model
         )
-        # ✅ 把影片 + 文字 prompt 合成 list 傳進去
-        payload = [Part.from_uri(uri, mime_type="video/mp4"), prompt]
-        return {"replies": generator.run(payload)["replies"]}
-
+        return {"replies": generator.run(prompt)["replies"]}
 
 # ========== Prompt ==========
 prompt_template = """ 
@@ -85,13 +83,12 @@ prompt_template = """
 {{ context }}
 
 請繼續為這段影片撰寫旁白：
-"""
+ """
 
 prompt_builder = PromptBuilder(
     template=prompt_template,
     required_variables=["intro", "context", "duration", "sentence_count"]
 )
-
 
 # ========== Pipeline ==========
 upload2gcs = Upload2GCS(bucket_name="ai_anchor")
@@ -108,14 +105,15 @@ pipeline.add_component(instance=prompt_builder, name="prompt_builder")
 pipeline.add_component(instance=add_video_2_prompt, name="add_video")
 pipeline.add_component(instance=gemini_generator, name="llm")
 
-# ✅ 正確連線
 pipeline.connect("upload2gcs.uri", "add_video.uri")
-pipeline.connect("prompt_builder", "add_video.prompt")
+pipeline.connect("prompt_builder", "add_video.text")
+
 pipeline.connect("add_video.uri", "llm.uri")
-pipeline.connect("add_video.prompt", "llm.prompt")
+pipeline.connect("add_video.text", "llm.text")
 
 
-# ========== 主邏輯 ==========
+
+# ========== 主邏輯（可供 Flask 調用） ==========
 def process_video_segments(video_folder, output_folder, intro_text):
     os.makedirs(output_folder, exist_ok=True)
     video_files = sorted([f for f in os.listdir(video_folder) if f.endswith(".mp4")])
@@ -163,7 +161,6 @@ def process_video_segments(video_folder, output_folder, intro_text):
             json.dump(segment_obj, f, ensure_ascii=False, indent=2)
 
     return results
-
 
 # ✅ 後端單測模式
 if __name__ == "__main__":

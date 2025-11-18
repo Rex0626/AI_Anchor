@@ -146,6 +146,6 @@ def batch_process(input_json_folder, output_folder):
 # ✅ 後端單測模式
 if __name__ == "__main__":
     input_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
-    output_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/emotional_outputs"
+    output_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/final_tts_google"
     result = batch_process(input_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

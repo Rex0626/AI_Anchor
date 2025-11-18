@@ -11,7 +11,7 @@ from tqdm import tqdm
 from google.api_core import exceptions
 
 # ========== 憑證載入 ==========
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b7105f6a.json")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 

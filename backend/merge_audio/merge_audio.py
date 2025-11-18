@@ -4,12 +4,23 @@ from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
 
 # ✅ 將時間字串轉為秒數
 def time_str_to_seconds(time_str):
-    parts = list(map(int, time_str.strip().split(":")))
-    if len(parts) == 3:
-        return parts[0]*3600 + parts[1]*60 + parts[2]
-    elif len(parts) == 2:
-        return parts[0]*60 + parts[1]
-    return 0
+    """將 H:MM:SS.f 時間碼轉換為秒數 (支持浮點數)。"""
+    try:
+        parts = time_str.split(':')
+        seconds = 0.0
+        if len(parts) == 3: # H:MM:SS.f
+            seconds += float(parts[0]) * 3600
+            seconds += float(parts[1]) * 60
+            seconds += float(parts[2])
+        elif len(parts) == 2: # MM:SS.f
+            seconds += float(parts[0]) * 60
+            seconds += float(parts[1])
+        elif len(parts) == 1: # SS.f
+             seconds += float(parts[0])
+        return seconds
+    except ValueError:
+        print(f"❌ time_str_to_seconds 轉換錯誤，輸入值: {time_str}")
+        return 0.0
 
 # ✅ 單段影片合成
 def merge_segment_video_with_audio(video_path, json_path, tts_dir, output_path, audio_delay=0.3):
@@ -89,10 +100,10 @@ def batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folde
 
 # ✅ 主程式
 if __name__ == "__main__":
-    video_folder = "D:/Vs.code/AI_Anchor/video_splitter/badminton_segments"
-    json_folder = "D:/Vs.code/AI_Anchor/gemini/batch_badminton_outputs"
-    tts_folder = "D:/Vs.code/AI_Anchor/TextToSpeech/emotional_outputs"
-    output_folder = "D:/Vs.code/AI_Anchor/merge_audio/output_videos"
+    video_folder = "D:/Vs.code/AI_Anchor/backend/video_splitter/badminton_segments"
+    json_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
+    tts_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/final_tts_google"
+    output_folder = "D:/Vs.code/AI_Anchor/backend/merge_audio/final_output_videos"
 
     result = batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

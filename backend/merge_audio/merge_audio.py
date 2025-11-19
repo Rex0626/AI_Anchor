@@ -101,7 +101,7 @@ def batch_merge_all_segments(video_folder, json_folder, tts_folder, output_folde
 # ✅ 主程式
 if __name__ == "__main__":
     video_folder = "D:/Vs.code/AI_Anchor/backend/video_splitter/badminton_segments"
-    json_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
+    json_folder = "D:/Vs.code/AI_Anchor/backend/gemini/final_narratives"
     tts_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/final_tts_google"
     output_folder = "D:/Vs.code/AI_Anchor/backend/merge_audio/final_output_videos"
 

@@ -84,7 +84,9 @@ def process_segment_json(json_path, output_base_dir):
     results = []
     seen_texts = set()
     for idx, item in enumerate(commentary):
-        emotion, text = clean_emotion_tag(item["text"])
+        # <<<< 修正點：直接讀取獨立的 emotion 欄位 >>>>
+        text = item["text"]
+        emotion = item.get("emotion", "平穩") # 如果沒有 emotion 欄位，預設為平穩
 
         # 1. 計算當前文本的 SHA256 雜湊值
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
@@ -145,7 +147,7 @@ def batch_process(input_json_folder, output_folder):
 
 # ✅ 後端單測模式
 if __name__ == "__main__":
-    input_folder = "D:/Vs.code/AI_Anchor/backend/gemini/batch_badminton_outputs"
+    input_folder = "D:/Vs.code/AI_Anchor/backend/gemini/final_narratives"
     output_folder = "D:/Vs.code/AI_Anchor/backend/TextToSpeech/final_tts_google"
     result = batch_process(input_folder, output_folder)
     print(json.dumps(result, ensure_ascii=False, indent=2))

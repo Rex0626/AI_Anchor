@@ -157,8 +157,17 @@ def process_stage1_events(video_folder, output_folder, intro_text):
                 "add_video": {"uri": video_uri}, # <<<< 傳入 URI
                 "prompt_builder": {"intro": intro_text}
             }
+            
             event_result = pipeline_event_analysis.run(prompt_input_event)
-            json_str = event_result["llm"]["replies"][0].strip()
+            
+            # <<<< 新增檢查：確認 LLM 是否有回傳結果 >>>>
+            replies = event_result["llm"]["replies"]
+            if not replies:
+                print(f"\n⚠️ Stage 1 警告：LLM 未回傳任何內容 (可能被安全機制過濾)。跳過：{file_name}")
+                continue
+            
+            json_str = replies[0].strip()
+            # <<<< 檢查結束 >>>>
             
             # 強化 JSON 輸出清理 (移除 Markdown 標記和額外文本)
             if json_str.startswith("```json"):

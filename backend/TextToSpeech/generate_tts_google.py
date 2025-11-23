@@ -15,9 +15,9 @@ client = texttospeech.TextToSpeechClient()
 
 # 情緒到語速(rate)和音量(volume_gain_db)的映射
 EMOTION_TTS_PARAMS = {
-    "激動": {"rate": 1.5, "volume_gain_db": 3.5},
-    "平穩": {"rate": 1.0, "volume_gain_db": 0.0},
-    "緊張": {"rate": 1.4, "volume_gain_db": 2.0},
+    "激動": {"rate": 1.7, "volume_gain_db": 3.5},
+    "平穩": {"rate": 1.5, "volume_gain_db": 0.0},
+    "緊張": {"rate": 1.6, "volume_gain_db": 2.0},
     "疑問": {"rate": 1.0, "volume_gain_db": 1.5},
     "強調": {"rate": 1.2, "volume_gain_db": 3.0},
     "精彩": {"rate": 1.5, "volume_gain_db": 3.0},

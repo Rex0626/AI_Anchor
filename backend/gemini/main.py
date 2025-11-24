@@ -1,98 +1,126 @@
 import os
 import time
-from videogen_stage1 import process_stage1_events
-from videogen_stage2 import process_stage2_narratives
+import threading
+import queue
+from tqdm import tqdm
+
+# 引入我們之前改好的單檔處理函式
+from videogen_stage1 import process_single_video_stage1
+from videogen_stage2 import process_single_video_stage2
+
+# 建立一個無限大小的佇列，用來傳遞 Stage 1 完成的任務給 Stage 2
+task_queue = queue.Queue()
 
 def count_files(folder, extension):
-    """輔助函式：計算檔案數量"""
-    if not os.path.exists(folder):
-        return 0
+    if not os.path.exists(folder): return 0
     return len([f for f in os.listdir(folder) if f.endswith(extension)])
 
 def format_seconds(seconds):
-    """將秒數轉為 分:秒 格式，方便閱讀"""
-    m = int(seconds // 60)
-    s = int(seconds % 60)
-    return f"{m}分 {s}秒 ({seconds:.2f}s)"
+    return f"{int(seconds // 60)}分 {int(seconds % 60)}秒"
 
+# ========== 執行緒 1：生產者 (負責跑 Stage 1) ==========
+def stage1_producer(video_files, video_folder, event_json_folder, intro_text):
+    print("👁️ [Stage 1 執行緒] 啟動，開始分析影像...")
+    
+    for i, file_name in enumerate(video_files):
+        video_path = os.path.join(video_folder, file_name)
+        print(f"\n[Stage 1] 正在分析第 {i+1} 支: {file_name}")
+        
+        # 執行 Stage 1
+        json_path = process_single_video_stage1(video_path, event_json_folder, intro_text)
+        
+        if json_path and os.path.exists(json_path):
+            # 成功！將任務打包放入佇列，讓 Stage 2 去撿
+            # 我們傳遞一個 tuple: (影片路徑, JSON路徑)
+            task_queue.put((video_path, json_path))
+            print(f"✅ [Stage 1] {file_name} 完成 -> 已加入 Stage 2 佇列")
+        else:
+            print(f"❌ [Stage 1] {file_name} 失敗，不進行後續處理")
+
+    # 全部影片都處理完了，放入一個 "毒藥丸 (Poison Pill)" 告訴 Stage 2 可以下班了
+    task_queue.put(None)
+    print("🏁 [Stage 1 執行緒] 所有影片分析完畢，準備結束。")
+
+# ========== 執行緒 2：消費者 (負責跑 Stage 2) ==========
+def stage2_consumer(final_output_folder):
+    print("✍️ [Stage 2 執行緒] 待命，等待 Stage 1 的產出...")
+    
+    success_count = 0
+    
+    while True:
+        # 從佇列中拿取任務 (如果佇列是空的，這裡會自動等待，直到有東西進來)
+        task = task_queue.get()
+        
+        # 檢查是否收到結束訊號 (毒藥丸)
+        if task is None:
+            task_queue.task_done()
+            break
+        
+        video_path, json_path = task
+        file_name = os.path.basename(video_path)
+        
+        print(f"\n   🚀 [Stage 2] 收到任務，開始生成敘事: {file_name}")
+        
+        # 執行 Stage 2
+        try:
+            result = process_single_video_stage2(video_path, json_path, final_output_folder)
+            if result:
+                print(f"   ✅ [Stage 2] {file_name} 敘事生成完畢！")
+                success_count += 1
+            else:
+                print(f"   ⚠️ [Stage 2] {file_name} 生成失敗")
+        except Exception as e:
+            print(f"   ❌ [Stage 2] 發生錯誤: {e}")
+
+        # 標記此任務已完成
+        task_queue.task_done()
+
+    print(f"🏁 [Stage 2 執行緒] 工作結束。共完成 {success_count} 支敘事。")
+
+# ========== 主程式 ==========
 def main():
-    # ========== 設定路徑 ==========
+    # 設定路徑
     base_dir = "D:/Vs.code/AI_Anchor"
     video_folder = os.path.join(base_dir, "backend/video_splitter/badminton_segments")
     event_json_folder = os.path.join(base_dir, "backend/gemini/event_analysis_output")
     final_output_folder = os.path.join(base_dir, "backend/gemini/final_narratives")
 
-    # ========== 初始化檢查 ==========
-    total_videos = count_files(video_folder, ".mp4")
+    # 掃描影片
+    video_files = sorted([f for f in os.listdir(video_folder) if f.endswith(".mp4")])
+    total_videos = len(video_files)
+
     if total_videos == 0:
-        print("❌ 錯誤：找不到影片檔案。")
+        print("❌ 找不到影片。")
         return
 
-    print(f"\n📊 任務隊列：共 {total_videos} 支影片待處理")
-    intro_text = input("請輸入影片背景介紹 (Enter 跳過)：") or "羽球比賽精彩片段"
-
-    print("\n🎬 [主程式] 計時開始...")
+    print(f"\n🚀 [並行流水線模式] 啟動！共 {total_videos} 支影片")
+    print("說明：Stage 1 (分析) 與 Stage 2 (寫稿) 將同時進行，大幅縮短等待時間。\n")
     
-    # 記錄總開始時間
-    global_start_time = time.time()
-
-    # ==========================================
-    # ⏱️ 執行 Stage 1 並計時
-    # ==========================================
-    print("\n🔄 [Stage 1] 啟動：事件分析...")
-    s1_start = time.time()
+    intro_text = input("請輸入背景介紹 (Enter 跳過)：") or "羽球比賽"
     
-    try:
-        process_stage1_events(video_folder, event_json_folder, intro_text)
-    except Exception as e:
-        print(f"❌ Stage 1 中斷: {e}")
-        return
+    global_start = time.time()
 
-    s1_end = time.time()
-    s1_duration = s1_end - s1_start
+    # 建立並啟動 Stage 1 執行緒
+    t1 = threading.Thread(target=stage1_producer, args=(video_files, video_folder, event_json_folder, intro_text))
     
-    # 檢查產出
-    json_count = count_files(event_json_folder, "_event.json")
-    if json_count == 0:
-        print("⚠️ Stage 1 未產出任何檔案，流程終止。")
-        return
+    # 建立並啟動 Stage 2 執行緒
+    t2 = threading.Thread(target=stage2_consumer, args=(final_output_folder,))
 
-    # ==========================================
-    # ⏱️ 執行 Stage 2 並計時
-    # ==========================================
-    print("\n🔄 [Stage 2] 啟動：敘事生成...")
-    s2_start = time.time()
+    # 開始跑！
+    t1.start()
+    t2.start()
 
-    try:
-        process_stage2_narratives(video_folder, event_json_folder, final_output_folder)
-    except Exception as e:
-        print(f"❌ Stage 2 中斷: {e}")
-        return
+    # 主程式等待兩個執行緒都跑完
+    t1.join()
+    t2.join()
 
-    s2_end = time.time()
-    s2_duration = s2_end - s2_start
-
-    # ==========================================
-    # 📊 最終效能報告
-    # ==========================================
-    global_end_time = time.time()
-    total_duration = global_end_time - global_start_time
-    
-    # 計算平均效率
-    avg_time_per_video = total_duration / total_videos if total_videos > 0 else 0
-
+    # 最終統計
+    total_time = time.time() - global_start
     print("\n" + "="*50)
-    print(f"✅ [執行完成] 效能統計報告")
+    print(f"🎉 所有流程完美結束！")
+    print(f"⏱️ 總耗時：{format_seconds(total_time)}")
+    print(f"⚡ 平均每支：{total_time/total_videos:.1f} 秒 (含並行加速)")
     print("="*50)
-    print(f"📂 處理影片數 ： {total_videos} 支")
-    print("-" * 30)
-    print(f"1️⃣ Stage 1 耗時： {format_seconds(s1_duration)}")
-    print(f"2️⃣ Stage 2 耗時： {format_seconds(s2_duration)}")
-    print("-" * 30)
-    print(f"⏱️ 總執行時間  ： {format_seconds(total_duration)}")
-    print(f"⚡ 平均速度    ： 每支影片約需 {avg_time_per_video:.2f} 秒")
-    print("="*50)
-    print(f"💾 最終檔案位置： {final_output_folder}")
 
 if __name__ == "__main__":
     main()

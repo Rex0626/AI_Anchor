@@ -1,7 +1,6 @@
 import os
 import json
-import re
-from datetime import timedelta
+import time
 from moviepy.editor import VideoFileClip
 from vertexai.generative_models import Part
 from haystack_integrations.components.generators.google_vertex import VertexAIGeminiGenerator
@@ -11,21 +10,16 @@ from google.cloud import storage
 from tqdm import tqdm
 from google.api_core import exceptions
 
-# ========== 憑證載入 ==========
+# ========== 1. 設定與憑證 ==========
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b7105f6a.json")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
-# ========== 關鍵參數 (新增) ==========
-# ⚡️ 強制最小時間區塊 (秒)，小於此長度會被合併
-MIN_CHUNK_DURATION = 1.5 
+# ========== 2. 關鍵參數 ==========
+MIN_CHUNK_DURATION = 2.0 
 
-# ========== 工具函數 (新增與修改) ==========
-def seconds_to_timecode(seconds):
-    return str(timedelta(seconds=round(seconds)))
-
+# ========== 3. 工具函數 ==========
 def parse_time_str(t_str):
-    """解析 '0:01.2' 為秒數 (float)"""
     try:
         if not t_str: return 0.0
         parts = t_str.strip().split(':')
@@ -37,72 +31,48 @@ def parse_time_str(t_str):
     except: return 0.0
 
 def format_time_str(seconds):
-    """將秒數轉回 '0:01.2' 格式"""
     m = int(seconds // 60)
     s = seconds % 60
     return f"{m}:{s:04.1f}"
 
 def enforce_min_duration(events_data):
-    """
-    🛡️ 強制合併邏輯：
-    遍歷 LLM 生成的事件列表，如果某個區塊 < 2.0 秒，
-    就將其與下一個區塊合併，直到滿足最小時長。
-    """
     if not events_data: return []
-
     merged_events = []
     buffer = None
-
     for ev in events_data:
-        start = parse_time_str(ev.get("start_time"))
-        end = parse_time_str(ev.get("end_time"))
-        
-        # 確保 inner events 是列表
         if "events" not in ev: ev["events"] = []
-        
         if buffer:
-            # 合併進 Buffer
-            buffer["end_time"] = ev["end_time"] # 延伸結束時間
-            buffer["events"].extend(ev["events"]) # 合併原子動作
-            
-            # 重新計算 Buffer 時長
-            buf_start = parse_time_str(buffer["start_time"])
-            buf_end = parse_time_str(buffer["end_time"])
-            
-            if (buf_end - buf_start) >= MIN_CHUNK_DURATION:
-                # 重新計算 time_range 字串
-                buffer["time_range"] = format_time_str(buf_end - buf_start)
+            buffer["end_time"] = ev["end_time"]
+            buffer["events"].extend(ev["events"])
+            b_start = parse_time_str(buffer["start_time"])
+            b_end = parse_time_str(buffer["end_time"])
+            if (b_end - b_start) >= MIN_CHUNK_DURATION:
+                buffer["time_range"] = format_time_str(b_end - b_start)
                 merged_events.append(buffer)
                 buffer = None
         else:
-            duration = end - start
-            if duration < MIN_CHUNK_DURATION:
-                buffer = ev # 時長不足，放入 Buffer 等待下一個來救
+            start = parse_time_str(ev.get("start_time"))
+            end = parse_time_str(ev.get("end_time"))
+            if (end - start) < MIN_CHUNK_DURATION:
+                buffer = ev 
             else:
-                ev["time_range"] = format_time_str(duration)
+                ev["time_range"] = format_time_str(end - start)
                 merged_events.append(ev)
-
-    # 迴圈結束後，如果 Buffer 還有剩 (通常是最後一個片段)，就直接加入
     if buffer:
-        # 重新計算 time_range
         b_s = parse_time_str(buffer["start_time"])
         b_e = parse_time_str(buffer["end_time"])
         buffer["time_range"] = format_time_str(b_e - b_s)
         merged_events.append(buffer)
-
-    # 重新編號 EID (可選，讓資料更好看)
     for chunk in merged_events:
         for i, atom in enumerate(chunk["events"]):
             atom["eid"] = i + 1
-
     return merged_events
 
-# ========== 組件 ==========
+# ========== 4. 組件與 Pipeline 初始化 (全域單次) ==========
 @component
 class Upload2GCS:
     def __init__(self, bucket_name: str):
         self.bucket_name = bucket_name
-
     @component.output_types(uri=str)
     def run(self, file_path: str):
         storage_client = storage.Client()
@@ -121,20 +91,12 @@ class AddVideo2Prompt:
 @component
 class GeminiGenerator:
     def __init__(self, project_id, location, model):
-        self.project_id = project_id
-        self.location = location
-        self.model = model
-
+        self.project_id, self.location, self.model = project_id, location, model
     @component.output_types(replies=list)
     def run(self, prompt: list):
-        generator = VertexAIGeminiGenerator(
-            project_id=self.project_id,
-            location=self.location,
-            model=self.model
-        )
+        generator = VertexAIGeminiGenerator(project_id=self.project_id, location=self.location, model=self.model)
         return {"replies": generator.run(prompt)["replies"]}
 
-# ========== Prompt (Stage 1: Event Analysis) ==========
 event_analysis_template = """ 
 你是一位**客觀且極速的事件分析器**，你的任務是將影片內容分解成結構化 JSON 數據。
 
@@ -222,107 +184,89 @@ JSON 輸出範例（請直接輸出 JSON 陣列）：
 }
 """
 
-prompt_builder_event = PromptBuilder(
-    template=event_analysis_template,
-    required_variables=["intro"]
-)
+prompt_builder_event = PromptBuilder(template=event_analysis_template, required_variables=["intro"])
 
-# ========== Pipeline (Stage 1) ==========
-# --- 組件實例化 ---
+# 初始化 Pipeline
 upload2gcs = Upload2GCS(bucket_name="ai_anchor")
-add_video_2_prompt = AddVideo2Prompt()
-gemini_generator = GeminiGenerator(
-    project_id="ai-anchor-462506",
-    location="us-central1",
-    model="gemini-2.5-pro"
-)
-
-# --- Pipeline 1: Upload ---
 pipeline_upload = Pipeline()
 pipeline_upload.add_component(instance=upload2gcs, name="upload2gcs")
 
-# --- Pipeline 2: Event Analysis ---
+add_video_2_prompt = AddVideo2Prompt()
+gemini_generator = GeminiGenerator(project_id="ai-anchor-462506", location="us-central1", model="gemini-2.5-flash")
 pipeline_event_analysis = Pipeline()
 pipeline_event_analysis.add_component(instance=prompt_builder_event, name="prompt_builder") 
 pipeline_event_analysis.add_component(instance=add_video_2_prompt, name="add_video")
 pipeline_event_analysis.add_component(instance=gemini_generator, name="llm")
-
 pipeline_event_analysis.connect("prompt_builder", "add_video")
 pipeline_event_analysis.connect("add_video.prompt", "llm")
 
-# ========== 主邏輯 ==========
-def process_stage1_events(video_folder, output_folder, intro_text):
+# ========== 5. 核心功能：處理單一影片 ==========
+def process_single_video_stage1(video_path, output_folder, intro_text):
+    """
+    處理單一影片：上傳 -> 分析 -> 存檔
+    回傳：成功生成的 JSON 路徑 (若失敗回傳 None)
+    """
     os.makedirs(output_folder, exist_ok=True)
-    video_files = sorted([f for f in os.listdir(video_folder) if f.endswith(".mp4")])
+    file_name = os.path.basename(video_path)
     
-    for file_name in tqdm(video_files, desc="[AI主播] Stage 1 事件分析"):
-        segment_path = os.path.join(video_folder, file_name)
-        json_str = ""
-        video_uri = ""
+    try:
+        # Step 1: Upload
+        upload_result = pipeline_upload.run({"upload2gcs": {"file_path": video_path}})
+        video_uri = upload_result["upload2gcs"]["uri"]
 
-        try:
-            # --- Step 1: Upload ---
-            upload_input = {"upload2gcs": {"file_path": segment_path}}
-            upload_result = pipeline_upload.run(upload_input)
-            video_uri = upload_result["upload2gcs"]["uri"]
+        # Step 2: Analyze
+        event_result = pipeline_event_analysis.run({
+            "add_video": {"uri": video_uri},
+            "prompt_builder": {"intro": intro_text}
+        })
+        
+        replies = event_result["llm"]["replies"]
+        if not replies:
+            print(f"⚠️ [Stage 1] 無回傳: {file_name}")
+            return None
+        
+        json_str = replies[0].strip()
+        if json_str.startswith("```json"): json_str = json_str[7:].strip()
+        if json_str.endswith("```"): json_str = json_str[:-3].strip()
+        start_index = json_str.find('[')
+        end_index = json_str.rfind(']')
+        if start_index != -1 and end_index != -1:
+             json_str = json_str[start_index : end_index + 1]
+        
+        event_data = json.loads(json_str) 
+        
+        # 強制合併邏輯
+        processed_events = enforce_min_duration(event_data)
+        
+        final_event_data = {
+            "segment_video_uri": video_uri,
+            "events": processed_events
+        }
+        
+        json_filename = f"{os.path.splitext(file_name)[0]}_event.json"
+        output_path = os.path.join(output_folder, json_filename)
+        with open(output_path, "w", encoding="utf-8") as f:
+             json.dump(final_event_data, f, ensure_ascii=False, indent=2)
 
-            # --- Step 2: Analyze ---
-            prompt_input_event = {
-                "add_video": {"uri": video_uri},
-                "prompt_builder": {"intro": intro_text}
-            }
-            event_result = pipeline_event_analysis.run(prompt_input_event)
-            
-            replies = event_result["llm"]["replies"]
-            if not replies:
-                print(f"\n⚠️ Stage 1 警告：LLM 未回傳任何內容。跳過：{file_name}")
-                continue
-            
-            json_str = replies[0].strip()
-            
-            # Cleanup
-            if json_str.startswith("```json"): json_str = json_str[7:].strip()
-            if json_str.endswith("```"): json_str = json_str[:-3].strip()
-            start_index = json_str.find('[')
-            end_index = json_str.rfind(']')
-            if start_index != -1 and end_index != -1 and end_index > start_index:
-                 json_str = json_str[start_index : end_index + 1]
-            
-            # Parse JSON
-            event_data = json.loads(json_str) 
-            
-            # 💡【關鍵修改】呼叫強制合併函數，確保最小時長 2.0 秒
-            processed_events = enforce_min_duration(event_data)
-            
-            # Save
-            final_event_data = {
-                "segment_video_uri": video_uri,
-                "events": processed_events # 儲存處理過的資料
-            }
-            
-            json_filename = f"{os.path.splitext(file_name)[0]}_event.json"
-            output_path = os.path.join(output_folder, json_filename)
-            with open(output_path, "w", encoding="utf-8") as f:
-                 json.dump(final_event_data, f, ensure_ascii=False, indent=2)
+        return output_path
 
-            print(f"\n✅ Stage 1 成功！(已執行2秒合併) 檔案：{json_filename}")
+    except Exception as e:
+        print(f"❌ [Stage 1 錯誤] {file_name}: {e}")
+        return None
 
-        except exceptions.GoogleAPIError as e:
-            print(f"\n❌ API 錯誤：{file_name}, {e}")
-            continue
-        except json.JSONDecodeError as e:
-            print(f"\n❌ JSON 錯誤：{file_name}, {e}")
-            print(f"原始輸出: {json_str[:100]}...")
-            continue
-        except Exception as e:
-            print(f"\n❌ 未知錯誤：{file_name}, {e}")
-            continue
-
-    print("\nStage 1 事件分析完成。")
-    return {"status": "Stage 1 completed"}
-
+# ========== 6. 獨立運行模式 (批次處理資料夾) ==========
 if __name__ == "__main__":
     video_folder = "D:/Vs.code/AI_Anchor/backend/video_splitter/badminton_segments"
     output_folder = "D:/Vs.code/AI_Anchor/backend/gemini/event_analysis_output"
-    intro_text = input("請輸入影片背景介紹：")
-    process_stage1_events(video_folder, output_folder, intro_text)
+    intro_text = input("請輸入影片背景介紹：") or "羽球比賽"
+    
+    print(f"\n🚀 [獨立模式] Stage 1 批次啟動...")
+    
+    if os.path.exists(video_folder):
+        files = sorted([f for f in os.listdir(video_folder) if f.endswith(".mp4")])
+        for f in tqdm(files, desc="Processing"):
+            path = os.path.join(video_folder, f)
+            res = process_single_video_stage1(path, output_folder, intro_text)
+            if res: print(f"  -> Saved: {os.path.basename(res)}")
+    else:
+        print("❌ 找不到影片資料夾")

@@ -19,6 +19,8 @@ SYLLABLES_PER_SEC = 4.8
 MIN_EVENT_DURATION = 1.0      
 MAX_RALLY_DURATION = 6.0      
 MAX_INTRO_OUTRO_SYLLABLES = 30 
+# ⚡️⚡️⚡️ [新增] 情境緩衝區 (初始值)
+CONTEXT_BUFFER = "這是比賽的第一個片段，請開始精彩的解說。"
 
 # ========== 3. 工具函數 ==========
 def seconds_to_timecode(seconds):
@@ -75,8 +77,30 @@ narrative_template = """
 1.  **比賽影片**：請觀察畫面中的精彩細節、球員情緒與擊球力道。
 2.  **時間區塊列表 (JSON)**：這是精準的動作紀錄與音節限制。
 
+# 👇 [新增這段]
+📜 **前情提要 (Context Buffer)：**
+{{ prev_context }}
+*(請根據上文，讓解說聽起來連貫，例如延續上一球的得分氣勢)*
+
 🎯 **你的任務：視覺與數據的完美結合**
 請根據 JSON 的指引鎖定時間段，並**觀看影片**來豐富你的解說。
+
+**🎙️ 播報三部曲 (Scenario Guide)：**
+
+1.  **🟢 [INTRO] 開場解說**：
+    * **任務**：暖場，將觀眾帶入比賽氣氛。
+    * **若時間充裕**：介紹對戰雙方、目前比分局勢、或球員的準備狀態（如：「各位觀眾好，現在是關鍵的決勝局！」）。
+    * **若時間短**：一句話帶過（如：「比賽開始！」）。
+
+2.  **🟡 [ID] 中場戰況 (比賽過程)**：
+    * **任務**：緊跟球路，描述攻防細節。
+    * **風格**：短促有力！使用「球員+動作」的短語模式。
+    * **視覺加分**：結合影片，描述殺球的「力道」、救球的「極限」、或球員的「吼叫」。
+
+3.  **🔴 [OUTRO] 結束總結**：
+    * **任務**：為這一段落畫下句點，釋放情緒。
+    * **若時間充裕**：讚嘆精彩表現、分析得分關鍵（如：「這球殺得太刁鑽了，完全沒辦法防守！」）。
+    * **若時間短**：宣告結果（如：「得分！」、「界外！」）。
 
 **八大黃金規則 (請嚴格遵守)：**
 1.  **極簡風格**：使用「球員+動作」的短語模式 (如：Miyau挑高、Tan殺球)。
@@ -112,7 +136,7 @@ narrative_template = """
 請輸出 JSON：
 """
 
-prompt_builder = PromptBuilder(template=narrative_template, required_variables=["event_data"])
+prompt_builder = PromptBuilder(template=narrative_template, required_variables=["event_data","prev_context"])
 
 add_video_s2 = AddVideo2Prompt()
 gemini_s2 = GeminiGenerator(project_id="ai-anchor-462506", location="us-central1", model="gemini-2.5-flash")
@@ -130,6 +154,9 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
     處理單一影片：讀取 JSON -> 聚合 -> 生成敘事
     回傳：生成的 JSON 路徑 (失敗回傳 None)
     """
+
+    global CONTEXT_BUFFER   # 👈 [新增] 引用全域變數，這樣才能讀取和更新它
+
     os.makedirs(output_folder, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     
@@ -221,7 +248,10 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
     try:
         res = pipeline_s2.run({
             "add_video": {"uri": video_uri},
-            "prompt_builder": {"event_data": json.dumps(llm_input_data, ensure_ascii=False, indent=2)}
+            "prompt_builder": {
+                "event_data": json.dumps(llm_input_data, ensure_ascii=False, indent=2),
+                "prev_context": CONTEXT_BUFFER # 👈 [新增] 傳入前情提要
+                }
         })
         reply = res["llm"]["replies"][0].strip()
         if reply.startswith("```"): reply = reply.split("\n", 1)[1].rsplit("\n", 1)[0]
@@ -262,6 +292,10 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
                 commentary[-1]["time_range"] = format_duration(new_dur)
                 continue
 
+        # 👇 [新增] 更新全域情境緩衝區
+        if text_content:
+            last_valid_text = text_content # 取最後一個生成的解說
+
         commentary.append({
             "start_time": seconds_to_timecode(chunk["start_sec"]),
             "end_time": seconds_to_timecode(chunk["end_sec"]),
@@ -269,6 +303,10 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
             "emotion": emotion,
             "text": text_content
         })
+
+    # 👇 [新增] 更新全域緩衝區，給下一支影片用
+    if last_valid_text:
+        CONTEXT_BUFFER = f"上一段影片的最後戰況是：{last_valid_text}"
 
     output_filename = f"{base_name}.json"
     output_path = os.path.join(output_folder, output_filename)

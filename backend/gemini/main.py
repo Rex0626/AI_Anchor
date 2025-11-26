@@ -81,7 +81,7 @@ def stage2_consumer(final_output_folder):
 def main():
     # 設定路徑
     base_dir = "D:/Vs.code/AI_Anchor"
-    video_folder = os.path.join(base_dir, "backend/video_splitter/badminton_segments")
+    video_folder = os.path.join(base_dir, "backend/video_splitter/badminton_segments(1126test)")
     event_json_folder = os.path.join(base_dir, "backend/gemini/event_analysis_output")
     final_output_folder = os.path.join(base_dir, "backend/gemini/final_narratives")
 

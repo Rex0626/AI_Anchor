@@ -47,7 +47,7 @@ def split_video(video_path, output_folder, segment_length=30, use_log=False):
 
 # ✅ 后端测试模式（直接运行这个文件时才会跑）
 if __name__ == "__main__":
-    input_video = "D:/Vs.code/AI_Anchor/video_download/download/badminton.mp4"
-    output_folder = "D:/Vs.code/AI_Anchor/video_splitter/badminton_segments"
+    input_video = "D:/Vs.code/AI_Anchor/backend/video_download/download/videoplayback (1).mp4"
+    output_folder = "D:/Vs.code/AI_Anchor/backend/video_splitter/badminton_segments(1126test)"
     result = split_video(input_video, output_folder, segment_length=30, use_log=True)
     print(result)

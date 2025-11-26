@@ -17,10 +17,13 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 # ========== 2. 關鍵參數 ==========
 SYLLABLES_PER_SEC = 4.8       
 MIN_EVENT_DURATION = 1.0      
-MAX_RALLY_DURATION = 6.0      
+MAX_RALLY_DURATION = 6.0
+MIN_GAP_DURATION = 3.0        
 MAX_INTRO_OUTRO_SYLLABLES = 30 
-# ⚡️⚡️⚡️ [新增] 情境緩衝區 (初始值)
-CONTEXT_BUFFER = "這是比賽的第一個片段，請開始精彩的解說。"
+
+# 不再只存一句話，而是存一個列表
+NARRATIVE_HISTORY = [] 
+HISTORY_WINDOW_SIZE = 3  # 設定視窗大小：每次提供給 LLM 最近 3 個片段的解說作為參考
 
 # ========== 3. 工具函數 ==========
 def seconds_to_timecode(seconds):
@@ -54,7 +57,7 @@ def estimate_speech_time(text):
     total_units = (len(chinese_chars) * 1.0) + (len(english_words) * 1.3) + (count_punc * 0.4)
     return total_units / SYLLABLES_PER_SEC
 
-# ========== 4. Pipeline 初始化 (全域) ==========
+# ========== 4. Pipeline 初始化 ==========
 @component
 class AddVideo2Prompt:
     @component.output_types(prompt=list)
@@ -70,74 +73,51 @@ class GeminiGenerator:
         generator = VertexAIGeminiGenerator(project_id=self.project_id, location=self.location, model=self.model)
         return {"replies": generator.run(prompt)["replies"]}
 
-# ========== 5. Prompt 模板 (數據 + 視覺雙重驅動) ==========
+# ========== 5. Prompt 模板 (針對歷史紀錄優化) ==========
 narrative_template = """ 
-你是一位**資深、節奏明快**的羽球賽事即時主播。
-現在你有兩個資訊來源：
-1.  **比賽影片**：請觀察畫面中的精彩細節、球員情緒與擊球力道。
-2.  **時間區塊列表 (JSON)**：這是精準的動作紀錄與音節限制。
+1. 角色 (Role)
+你是一位**資深、熱血且節奏明快**的羽球賽事即時主播。
+你的聲音充滿激情，能精準捕捉賽場上的每一個精彩瞬間。
 
-# 👇 [新增這段]
-📜 **前情提要 (Context Buffer)：**
+2. 前情提要 (Context)
+- **歷史戰況回顧**：
 {{ prev_context }}
-*(請根據上文，讓解說聽起來連貫，例如延續上一球的得分氣勢)*
+*(請參考上述歷史紀錄，掌握比賽氣勢流向，例如是否有人連續得分)*
 
-🎯 **你的任務：視覺與數據的完美結合**
-請根據 JSON 的指引鎖定時間段，並**觀看影片**來豐富你的解說。
+- **視覺與數據**：請結合影片畫面與下方 JSON 數據進行解說。
 
-**🎙️ 播報三部曲 (Scenario Guide)：**
+3. 應該要做的事 (Tasks)
+- **區分場景**：
+    - **🟢 INTRO**: 暖場，帶入氣氛。
+    - **🟡 RALLY**: 緊跟球路，串聯攻防。
+    - **🔵 GAP**: 填補間隙，可評論**上一段歷史戰況**或分析心理。
+    - **🔴 OUTRO**: 總結本段落。
+- **連貫性**：如果歷史戰況顯示某方氣勢正旺，請在解說中體現這一點（例如「又是他！連續得分！」）。
+- **視覺加分**：形容動作細節（勢大力沉、極限撲救）。
+- **人名重述**：務必帶上球員名字。
 
-1.  **🟢 [INTRO] 開場解說**：
-    * **任務**：暖場，將觀眾帶入比賽氣氛。
-    * **若時間充裕**：介紹對戰雙方、目前比分局勢、或球員的準備狀態（如：「各位觀眾好，現在是關鍵的決勝局！」）。
-    * **若時間短**：一句話帶過（如：「比賽開始！」）。
+4. 禁止做的事 (Strict Prohibitions)
+⛔️ **嚴格禁令：**
+- **絕對不可超時**：嚴格遵守 `constraint`。
+- **不可機械式朗讀**。
+- **不可編造人名**。
 
-2.  **🟡 [ID] 中場戰況 (比賽過程)**：
-    * **任務**：緊跟球路，描述攻防細節。
-    * **風格**：短促有力！使用「球員+動作」的短語模式。
-    * **視覺加分**：結合影片，描述殺球的「力道」、救球的「極限」、或球員的「吼叫」。
+5. JSON 欄位定義
+輸出純 JSON 陣列，包含 `id` 和 `text`。
 
-3.  **🔴 [OUTRO] 結束總結**：
-    * **任務**：為這一段落畫下句點，釋放情緒。
-    * **若時間充裕**：讚嘆精彩表現、分析得分關鍵（如：「這球殺得太刁鑽了，完全沒辦法防守！」）。
-    * **若時間短**：宣告結果（如：「得分！」、「界外！」）。
+6. JSON 輸出範例
+**輸入:**
+[{"id": 0, "constraint": "限 20 音節", "content": "Sakuramoto殺球 -> Tan擋網"}]
+**輸出:**
+[{"id": 0, "text": "Sakuramoto延續剛才的氣勢連續猛攻，Tan頑強防守！"}]
 
-**八大黃金規則 (請嚴格遵守)：**
-1.  **極簡風格**：使用「球員+動作」的短語模式 (如：Miyau挑高、Tan殺球)。
-2.  **資料正確性 (重要)**：人名與動作類型**必須直接使用輸入資料中的詞彙**！(JSON 是事實基準)。
-3.  **人名重述 (重要)**：每隔 1-2 個短句，或者在攻防轉換時，**務必帶上球員名字**。
-    * ❌ 不好：殺球！挑高！又殺球！
-    * ✅ 完美：Sakura殺球！Tan挑高！Miyau再扣殺！
-4.  **嚴格限長**：若限制很短 (如 < 6)，絕不能寫長句，請用單詞 (如：得分！)。
-5.  **重複即總結**：如果包含重複動作 (如：殺球->挑球->殺球)，請改用**總結說明** (如：「雙方激烈攻防！」)。
-6.  **不重複**：上下時段內容若相似，請換個說法或加語氣詞。
-7.  **完整性**：句子必須是完整的「球員+動作」結構，不要留下只有名字的斷句。
-    * ❌ 錯誤：櫻本再殺！陳康
-    * ✅ 正確：櫻本再殺！陳康擋網！
-8.  **視覺加分 (Visuals)**：請觀察影片細節，加入**形容詞**或**情緒**，但不要改變動作本質。
-    * ❌ 平淡：Tan殺球。
-    * ✅ 生動：Tan**躍起重扣**！ (觀察到跳很高)
-    * ✅ 生動：Miyau**極限**救球！ (觀察到動作很勉強)
-
-📌 **輸入資料範例：**
-* ID: 0 | 限制: 20 | 內容: 殺球 -> 挑球 -> 殺球 -> 擋網
-* ID: 1 | 限制: 4 | 內容: 殺球 (得分)
-
-📌 **輸出格式 (JSON 陣列)：**
-注意：只需要回傳 ID 和 Text。
-[
-  {"id": 0, "text": "Sakuramoto連續猛攻，Tan頑強擋下！"},
-  {"id": 1, "text": "殺球得分！"}
-]
-
-📊 **待處理列表 (請依此為準)：**
+📊 **本段待處理列表：**
 {{ event_data }}
 
 請輸出 JSON：
 """
 
 prompt_builder = PromptBuilder(template=narrative_template, required_variables=["event_data","prev_context"])
-
 add_video_s2 = AddVideo2Prompt()
 gemini_s2 = GeminiGenerator(project_id="ai-anchor-462506", location="us-central1", model="gemini-2.5-flash")
 
@@ -148,14 +128,33 @@ pipeline_s2.add_component(instance=gemini_s2, name="llm")
 pipeline_s2.connect("prompt_builder.prompt", "add_video.prompt")
 pipeline_s2.connect("add_video.prompt", "llm.prompt")
 
-# ========== 5. 核心功能：處理單一影片 ==========
-def process_single_video_stage2(video_path, event_json_path, output_folder):
-    """
-    處理單一影片：讀取 JSON -> 聚合 -> 生成敘事
-    回傳：生成的 JSON 路徑 (失敗回傳 None)
-    """
+# ========== 6. 輔助函式 ==========
+def _flush_chunk(results_list, chunk_data, global_counter_ref):
+    dur = chunk_data["end"] - chunk_data["start"]
+    limit = int(dur * SYLLABLES_PER_SEC)
+    should_keep = False
+    
+    if chunk_data.get("is_crucial", False):
+        limit = max(limit, 4) 
+        should_keep = True
+    elif chunk_data.get("info", "") == "中場間隙 (Gap)":
+        should_keep = True
+    else:
+        if limit > 3: should_keep = True
 
-    global CONTEXT_BUFFER   # 👈 [新增] 引用全域變數，這樣才能讀取和更新它
+    if should_keep:
+        results_list.append({
+            "global_id": global_counter_ref[0], 
+            "start_sec": chunk_data["start"], 
+            "end_sec": chunk_data["end"], 
+            "limit": limit, 
+            "info": chunk_data["info"]
+        })
+        global_counter_ref[0] += 1
+
+# ========== 7. 核心功能：處理單一影片 ==========
+def process_single_video_stage2(video_path, event_json_path, output_folder):
+    global NARRATIVE_HISTORY # 引用全域歷史列表
 
     os.makedirs(output_folder, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -173,74 +172,118 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
 
     if not nested_events: return None
 
-    # --- A. 數據聚合邏輯 (省略重複代碼，請直接複製之前的聚合邏輯) ---
-    # ... (這裡請放入之前的 RALLY_TYPES, chunk_events, buffer_chunk 等完整聚合邏輯) ...
-    # 為節省篇幅，這裡假設 chunk_events 已經生成好了
-    
-    # ********** 為了完整性，請將上一版完整的聚合代碼貼在這裡 **********
-    # (包含 INTRO, 迴圈處理原始區塊, OUTRO)
-    RALLY_TYPES = ["Exchange", "Smash", "Defend"]
+    # --- A. 數據聚合邏輯 (含 Gap Detection) ---
+    RALLY_TYPES = ["Exchange", "Attack", "Defend"] 
     chunk_events = [] 
-    global_id_counter = 0
-    
+    global_id_counter = [0] 
+    last_committed_time = 0.0
+
     # 1. INTRO
     first_chunk_start = parse_time_str(nested_events[0].get("start_time", "0:00.0"))
-    intro_limit = int(first_chunk_start * SYLLABLES_PER_SEC)
-    if intro_limit > MAX_INTRO_OUTRO_SYLLABLES: intro_limit = MAX_INTRO_OUTRO_SYLLABLES
-    if intro_limit >= 8:
-            chunk_events.append({
+    intro_dur = first_chunk_start
+    intro_limit = int(intro_dur * SYLLABLES_PER_SEC)
+    
+    if intro_limit >= 8 and intro_limit <= MAX_INTRO_OUTRO_SYLLABLES:
+        chunk_events.append({
             "global_id": "INTRO",
             "start_sec": 0.0,
             "end_sec": first_chunk_start,
             "limit": intro_limit,
             "info": "開場空白"
         })
-    last_event_end = 0.0
+        last_committed_time = first_chunk_start
+    else:
+        last_committed_time = 0.0
     
     # 2. 聚合迴圈
     buffer_chunk = None
+
     for chunk in nested_events:
         chunk_start = parse_time_str(chunk.get("start_time", "0:00.0"))
         chunk_end = parse_time_str(chunk.get("end_time", "0:00.0"))
         inner_list = chunk.get("events", [])
+        
         if not inner_list: continue
+
         actions_str = " -> ".join([f"{ev.get('player')}{ev.get('action')}" for ev in inner_list])
-        is_pure_rally = all(ev.get('category') in RALLY_TYPES for ev in inner_list) and \
-                        not any(ev.get('category') == 'Score' for ev in inner_list)
-        current_chunk = {"start": chunk_start, "end": chunk_end, "info": actions_str, "is_rally": is_pure_rally}
+        is_crucial = any(ev.get('is_crucial') is True for ev in inner_list)
+        is_pure_rally = all(ev.get('category') in RALLY_TYPES for ev in inner_list) and not is_crucial
 
-        if buffer_chunk:
-            potential_dur = current_chunk["end"] - buffer_chunk["start"]
-            is_mergeable = (buffer_chunk["is_rally"] and current_chunk["is_rally"] and potential_dur <= MAX_RALLY_DURATION)
-            if is_mergeable:
-                buffer_chunk["end"] = current_chunk["end"]
-                buffer_chunk["info"] += f" -> {current_chunk['info']}"
-            else:
-                dur = buffer_chunk["end"] - buffer_chunk["start"]
-                limit = int(dur * SYLLABLES_PER_SEC)
-                if limit > 3:
-                    chunk_events.append({"global_id": global_id_counter, "start_sec": buffer_chunk["start"], "end_sec": buffer_chunk["end"], "limit": limit, "info": buffer_chunk["info"]})
-                    global_id_counter += 1
-                buffer_chunk = current_chunk
-        else:
+        current_chunk = {
+            "start": chunk_start, 
+            "end": chunk_end, 
+            "info": actions_str,
+            "is_rally": is_pure_rally,
+            "is_crucial": is_crucial 
+        }
+
+        # Gap Detection
+        prev_end_candidate = buffer_chunk["end"] if buffer_chunk else last_committed_time
+        gap_duration = chunk_start - prev_end_candidate
+        
+        if gap_duration > MIN_GAP_DURATION:
+            if buffer_chunk:
+                _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
+                last_committed_time = buffer_chunk["end"]
+                buffer_chunk = None
+                prev_end_candidate = last_committed_time
+            
+            gap_chunk = {
+                "start": prev_end_candidate,
+                "end": chunk_start,
+                "info": "中場間隙 (Gap)",
+                "is_crucial": False
+            }
+            _flush_chunk(chunk_events, gap_chunk, global_id_counter)
+            last_committed_time = chunk_start
             buffer_chunk = current_chunk
-        last_event_end = max(last_event_end, chunk_end)
 
+        else:
+            if buffer_chunk:
+                potential_dur = current_chunk["end"] - buffer_chunk["start"]
+                is_mergeable = (
+                    buffer_chunk["is_rally"] and 
+                    current_chunk["is_rally"] and 
+                    potential_dur <= MAX_RALLY_DURATION
+                )
+                
+                if is_mergeable:
+                    buffer_chunk["end"] = current_chunk["end"] 
+                    buffer_chunk["info"] += f" -> {current_chunk['info']}"
+                else:
+                    _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
+                    last_committed_time = buffer_chunk["end"]
+                    buffer_chunk = current_chunk
+            else:
+                buffer_chunk = current_chunk
+        
     if buffer_chunk:
-        dur = buffer_chunk["end"] - buffer_chunk["start"]
-        limit = int(dur * SYLLABLES_PER_SEC)
-        if limit > 3:
-            chunk_events.append({"global_id": global_id_counter, "start_sec": buffer_chunk["start"], "end_sec": buffer_chunk["end"], "limit": limit, "info": buffer_chunk["info"]})
-            global_id_counter += 1
+        _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
+        last_committed_time = buffer_chunk["end"]
 
     # 3. OUTRO
-    outro_dur = total_duration - last_event_end
+    outro_dur = total_duration - last_committed_time
     outro_limit = int(outro_dur * SYLLABLES_PER_SEC)
-    if outro_limit > MAX_INTRO_OUTRO_SYLLABLES: outro_limit = MAX_INTRO_OUTRO_SYLLABLES
-    if outro_limit >= 8:
-        chunk_events.append({"global_id": "OUTRO", "start_sec": last_event_end, "end_sec": total_duration, "limit": outro_limit, "info": "結尾空白"})
+    
+    if outro_limit >= 8 and outro_limit <= MAX_INTRO_OUTRO_SYLLABLES:
+        chunk_events.append({
+            "global_id": "OUTRO", 
+            "start_sec": last_committed_time, 
+            "end_sec": total_duration, 
+            "limit": outro_limit, 
+            "info": "結尾空白"
+        })
 
-    # --- B. 呼叫 LLM ---
+    # --- B. 呼叫 LLM (含歷史視窗) ---
+    
+    # 🔥 [修改點 2] 準備歷史上下文 (Sliding Window)
+    if NARRATIVE_HISTORY:
+        # 取出最近 N 個片段，用換行符號連接，並加上編號
+        recent_history = NARRATIVE_HISTORY[-HISTORY_WINDOW_SIZE:]
+        history_str = "\n".join([f"- {h}" for h in recent_history])
+    else:
+        history_str = "這是比賽的第一個片段，請開始精彩的解說。"
+
     llm_input_data = []
     for e in chunk_events:
         llm_input_data.append({"id": e["global_id"], "constraint": f"限 {e['limit']} 音節", "content": e["info"]})
@@ -250,7 +293,7 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
             "add_video": {"uri": video_uri},
             "prompt_builder": {
                 "event_data": json.dumps(llm_input_data, ensure_ascii=False, indent=2),
-                "prev_context": CONTEXT_BUFFER # 👈 [新增] 傳入前情提要
+                "prev_context": history_str # 傳入視窗化後的歷史
                 }
         })
         reply = res["llm"]["replies"][0].strip()
@@ -263,6 +306,8 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
 
     # --- C. 輸出結果 ---
     commentary = []
+    current_segment_narrative = [] # 用於收集本片段的所有解說，存入歷史
+    
     for chunk in chunk_events:
         gid = str(chunk["global_id"])
         text_content = generated_map.get(gid)
@@ -270,7 +315,7 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
 
         duration = chunk["end_sec"] - chunk["start_sec"]
         
-        # 寬容截斷
+        # 截斷保護
         validation_duration = duration
         if gid in ["INTRO", "OUTRO"]: validation_duration = min(duration, 5.0)
         
@@ -280,9 +325,12 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
             safe_length = int(len(text_content) * ratio)
             text_content = text_content[:safe_length].rstrip("，,")
 
-        emotion = "激動" if "殺球" in chunk["info"] or "得分" in chunk["info"] else "平穩"
+        chunk_info_lower = chunk["info"].lower()
+        if "gap" in chunk_info_lower:
+            emotion = "平穩"
+        else:
+            emotion = "激動" if "殺球" in chunk_info_lower or "得分" in chunk_info_lower or "attack" in chunk_info_lower else "平穩"
 
-        # 去重
         if commentary and len(text_content) >= 2 and len(commentary[-1]["text"]) >= 2:
             check_len = min(5, len(text_content), len(commentary[-1]["text"]))
             if text_content[:check_len] == commentary[-1]["text"][:check_len]:
@@ -291,10 +339,9 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
                 new_dur = chunk["end_sec"] - prev_start
                 commentary[-1]["time_range"] = format_duration(new_dur)
                 continue
-
-        # 👇 [新增] 更新全域情境緩衝區
+        
         if text_content:
-            last_valid_text = text_content # 取最後一個生成的解說
+            current_segment_narrative.append(text_content)
 
         commentary.append({
             "start_time": seconds_to_timecode(chunk["start_sec"]),
@@ -304,9 +351,14 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
             "text": text_content
         })
 
-    # 👇 [新增] 更新全域緩衝區，給下一支影片用
-    if last_valid_text:
-        CONTEXT_BUFFER = f"上一段影片的最後戰況是：{last_valid_text}"
+    # 🔥 [修改點 3] 更新歷史紀錄
+    # 將本片段生成的所有旁白合併成一段字串，存入全域列表
+    if current_segment_narrative:
+        full_segment_text = " ".join(current_segment_narrative)
+        NARRATIVE_HISTORY.append(full_segment_text)
+        # 可選：限制歷史列表總長度，避免內存無限膨脹 (雖然文字佔用很少)
+        if len(NARRATIVE_HISTORY) > 20: 
+            NARRATIVE_HISTORY.pop(0)
 
     output_filename = f"{base_name}.json"
     output_path = os.path.join(output_folder, output_filename)
@@ -317,13 +369,16 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
     else:
         return None
 
-# ========== 6. 獨立運行模式 ==========
+# ========== 8. 獨立運行模式 ==========
 if __name__ == "__main__":
     video_folder = "D:/Vs.code/AI_Anchor/backend/video_splitter/badminton_segments"
     event_json_folder = "D:/Vs.code/AI_Anchor/backend/gemini/event_analysis_output"
     output_folder = "D:/Vs.code/AI_Anchor/backend/gemini/final_narratives"
     
-    print(f"\n🚀 [獨立模式] Stage 2 批次啟動...")
+    # 清空歷史 (獨立運行時)
+    NARRATIVE_HISTORY = []
+    
+    print(f"\n🚀 [獨立模式] Stage 2 (滑動窗口歷史版) 批次啟動...")
     if os.path.exists(event_json_folder):
         files = sorted([f for f in os.listdir(event_json_folder) if f.endswith("_event.json")])
         for f in tqdm(files, desc="Processing"):

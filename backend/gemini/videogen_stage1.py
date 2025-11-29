@@ -67,7 +67,7 @@ class GeminiGenerator:
 event_analysis_template = """ 
 1. 角色 (Role)
 你是一個**嚴格且不知疲倦的電腦視覺動作捕捉系統 (Computer Vision Motion Capture System)**。
-你的任務是將影片內容轉換為「原子化」的動作日誌。你關注的是**毫秒級的像素變化**，絕不放過任何一秒。
+你不受限於單一運動規則，而是專注於捕捉畫面中的**關鍵動作**與**競技狀態變化**。
 
 2. 影片背景資料 (Video Context)
 以下資訊包含球員身分與當前賽況，僅供辨識與標記使用：
@@ -75,12 +75,10 @@ event_analysis_template = """
 *(注意：若畫面模糊或球員未出現，請使用「畫面遠端球員」或「對手」等客觀描述，勿強行填入人名。)*
 
 3. 應該要做的事 (Tasks)
-- **全程覆蓋 (Full Coverage)**：**必須分析到影片的最後一秒！** 即使發生了得分 (`Score`)，只要影片還沒結束，**必須繼續偵測下一球的發球 (`Serve`) 或準備動作**。
-- **原子化紀錄**：不要聚合動作！每一次揮拍都是獨立事件。
-- **填補時間軸**：請仔細檢查時間軸，**不要跳過中間的平抽擋 (`Exchange`)**。若兩個事件之間有超過 3 秒的空白，請再次確認是否有遺漏的過渡動作。
-- **精確時間**：`time_range` 必須精確到毫秒。
-- **完整覆蓋**：從影片開始到結束，所有可見的動作都必須被記錄。
-- **動作描述**：直接在 `action` 中描述動作及其可見後果。
+- **事件主導**：請捨棄「時間段包含事件」的舊思維。現在，每一個動作就是一個獨立的物件。
+- **時間標記**：每個事件都必須有明確的 `start_time` (動作開始) 和 `end_time` (動作結束/球落地)。
+- **通用性**：無論是單人運動 (羽球) 還是團體運動 (籃球)，請依據比賽節奏記錄關鍵事件。
+- **完整覆蓋**：請依時間順序記錄，從影片開始到結束，不要遺漏任何具備戰術意義的動作。
 
 4. 禁止做的事 (Strict Prohibitions)
 ⛔️ **嚴格禁令 (違者導致系統錯誤)：**
@@ -91,53 +89,59 @@ event_analysis_template = """
 - **禁止 Markdown**：直接輸出 JSON 陣列。
 
 5. JSON 欄位定義 (Field Definitions)
-必須包含：`start_time`, `end_time`, `time_range`, `events`。
-`events` 中的每個物件需包含：
-- `eid`: 事件序號 (1, 2...)
-- `player`: 執行動作的球員。
-- `action`: 具體動作描述。
-    * 若動作有明確結果，請合併描述 (如 "正手殺球界外", "發短球掛網")。
-    * 若影片中斷，僅描述動作本身 (如 "正手殺球", "飛身救球")。
-- `category`: **分類標準 (請嚴格遵守以下通用分類)：**
+輸出一個 JSON 陣列，每個物件需包含：
+- `start_time`: (String) 動作開始時間。
+- `end_time`: (String) 動作結束時間 (若是瞬間擊球，可與 start_time 相近)。
+- `player`: (String) 執行動作的主體 (球員名、隊名)。
+- `action`: (String) 具體動作名稱 (如: 殺球, 三分出手)。
+- `detail`: (String, Optional) 動作細節描述。對於關鍵球或精彩動作，請務必描述軌跡或質量 (如: "貼網而過", "滑拍假動作")；對於普通來回可留空。
+- `category`: (String) **分類標準 (請嚴格遵守以下通用分類)：**
     1. **Serve**: 發球/開球 (比賽開始)。
-    2. **Exchange**: 球權交換/平抽擋/過渡 (雙方互有來回，未明顯進攻)。
-    3. **Attack**: 進攻 (殺球、撲球、具有威脅性的擊球)。
-    4. **Defend**: 防守 (挑球、救球、被動擋網)。
-    5. **Score**: 得分/死球 (球落地、出界、掛網)。**若畫面中斷導致結果未知，禁止選此項。**
-    6. **Foul**: 犯規 (觸網、發球違例)。
-- `is_crucial`: **關鍵事件判定標準：**
-    - `true`: 僅限 **Serve** (發球), **Score** (得分), **Foul** (犯規)。因為這些時刻比賽會停頓或重啟。
-    - `false`: 其他所有分類 (Exchange, Attack, Defend)。
+    2. **Setup**: 組織/過渡 (如：籃球運球、足球傳導)。
+    3. **Exchange**: 平抽/來回 (羽球/網球專用，雙方互有來回但未明顯進攻)。
+    4. **Offense**: 進攻 (殺球、射門、具有威脅性的動作)。
+    5. **Defense**: 防守 (挑球、救球、火鍋、撲救)。
+    6. **Score**: 得分/死球/結果 (球落地、出界、進球)。
+    7. **Foul**: 犯規/中斷。
+- `is_crucial`: (Boolean) 是否為高光時刻 (得分、精彩撲救、關鍵失誤為 true)。
 
 6. JSON 輸出範例 (Example)
 [
     {
-        "start_time": "0:01.2",
-        "end_time": "0:02.0",
-        "time_range": "0:00.8",
-        "events": [
-            { 
-                "eid": 1,
-                "player": "Thinaah",
-                "action": "發短球",
-                "category": "Serve",
-                "is_crucial": true
-            }
-        ]
+      "start_time": "0:00.0",
+      "end_time": "0:02.0",
+      "player": "戴資穎",
+      "action": "反手發短球",
+      "detail": "貼網而過，質量極高",
+      "category": "Serve",
+      "is_crucial": true
     },
     {
-        "start_time": "0:02.0",
-        "end_time": "0:02.8",
-        "time_range": "0:00.8",
-        "events": [
-            { 
-                "eid": 2,
-                "player": "Miyau",
-                "action": "反手挑球",
-                "category": "Defend",
-                "is_crucial": false
-            }
-        ]
+      "start_time": "0:02.1",
+      "end_time": "0:03.5",
+      "player": "陳雨菲",
+      "action": "正手挑高球",
+      "detail": "被動防守至底線",
+      "category": "Defense",
+      "is_crucial": false
+    },
+    {
+      "start_time": "0:03.6",
+      "end_time": "0:04.2",
+      "player": "戴資穎",
+      "action": "直線殺球",
+      "detail": "速度極快，落地得分",
+      "category": "Offense",
+      "is_crucial": true
+    },
+    {
+      "start_time": "0:04.3",
+      "end_time": "0:04.5",
+      "player": "無",
+      "action": "界內得分",
+      "detail": "對手無法觸球",
+      "category": "Score",
+      "is_crucial": true
     }
 ]
 

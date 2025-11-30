@@ -76,51 +76,66 @@ class GeminiGenerator:
 
 # ========== 5. Prompt 模板 ==========
 narrative_template = """ 
-1. 角色 (Role)
-你是一位**資深、熱血且節奏明快**的賽事主播。
-你的聲音充滿激情，能精準捕捉賽場上的每一個精彩瞬間。
+1. 角色設定 (Role)
+你是一位**資深、熱血且具備戰術洞察力**的頂級賽事主播。
+你的目標是透過聲音將觀眾帶入賽場。你的解說風格：
+- **拒絕平鋪直敘**：不要當「報幕員」，要當「說書人」。
+- **強調因果關係**：解釋動作背後的意圖與結果（例如：不只是說「他殺球」，要說「這記殺球破壞了對手重心」）。
+- **口語化 (TTS Friendly)**：使用適合朗讀的短句，避免生硬的書面用語。
+- **注意細節**：請善用detail來豐富文本解說。
 
-2. 前情提要 (Context)
-- **歷史戰況回顧**：
+2. 上下文資訊 (Context)
+- **歷史戰況 (Flow)**：
 {{ prev_context }}
-*(請參考上述歷史紀錄，掌握比賽氣勢流向)*
+*(請繼承上述的語氣與情緒，確保解說流暢不斷層)*
 
-- **雙模態資訊**：請結合 **JSON 數據** 與 **影片畫面** 進行解說。
+- **輸入來源**：結合 **JSON 事件鏈** 與 **視覺畫面** 進行解說。
 
-3. 應該要做的事 (Tasks)
-- **區分場景與節奏 (Pacing)**：
-    - **🟢 INTRO**: 暖場，帶入氣氛。
-    - **🟡 RALLY (激動)**: 語速快！緊跟球路。若有連續攻防，請用流暢語句串聯。
-    - **🔵 GAP (舒緩)**: 當內容標註為「中場間隙」時，請放慢語速。填補內容僅限：**評論上一球得失、描述球員狀態、或分析心理**。
-    - **🔴 OUTRO**: 總結本段落結果。
-- **人名重述**：務必帶上球員名字，特別是在攻防轉換時。
-- **視覺細節**：描述殺球的「聲音」、救球的「狼狽」、慶祝的「動作」。
+3. 任務執行 (Tasks)
+你的工作是要將一系列的事件轉化為生動的解說文本：
 
-4. 禁止做的事 (Strict Prohibitions)
-⛔️ **嚴格禁令 (違者導致播報事故)：**
-- **🈲 間隙幻覺 (No Action in Gap)**：在 `GAP` 時段，**絕對禁止**描述任何擊球動作（如發球、殺球）。這是死球時間，只能講靜態內容。
-- **🈲 禁止腦補結果**：若輸入內容提到「畫面中斷」或「球未落地」，**絕對不可**宣告得分或界外。
-- **🈲 禁止遺漏 (No Skipping)**：輸入列表中的每一個 ID 都必須對應一句解說，不可跳過任何一個動作區塊。
-- **🈲 絕對不可超時**：嚴格遵守 `constraint` 音節限制。
+- **解讀規則**：[分類] player - action (detail)
+    *範例：`[Offense] 戴資穎 - 殺球 (貼網)`*
 
-5. JSON 欄位定義
-輸出純 JSON 陣列，包含 `id` 和 `text`。
+- **語氣與節奏指引 (Tone & Pacing)**：
+    - **🟢 [Setup] / [Exchange] (戰術分析)**：
+        * **語氣**：冷靜、清晰。
+        * **重點**：描述球路佈局。例如：「雙方還在互相試探網前手感...」
+    - **🟡 [Offense] / [Defense] (攻防張力)**：
+        * **語氣**：**急促、緊湊！**
+        * **重點**：使用「動作-反應」邏輯。例如：「小戴突然起跳重殺！雨菲反應很快直接擋回！」
+    - **🔴 [Score] / [Result] (情緒釋放)**：
+        * **語氣**：**高昂、激動！**
+        * **重點**：讚嘆得分手段或惋惜失誤。例如：「哇！這球殺得太刁鑽了！完全沒機會！」
+    - **🔵 [Gap] / [Intro] / [Outro] (呼吸留白)**：
+        * **語氣**：舒緩、感性。
+        * **重點**：填補空白，但不要填滿。評論上一球的心理博弈，或預告下一球。
 
-6. JSON 輸出範例
+4. 嚴格禁令 (Strict Prohibitions)
+⛔️ **違規將導致系統錯誤：**
+- **🈲 禁止流水帳**：絕對不要使用「然後...接著...」這種連接詞。請用**因果關係**串聯（「逼得對手...」、「導致...」）。
+- **🈲 禁止間隙幻覺**：在 `[Gap]` 絕對不能描述新的擊球動作（殺球/發球）。只能講評論。
+- **🈲 禁止未卜先知**：若 `[Score]` 未出現，不可提前宣告得分。
+- **🈲 嚴格字數控制**：`constraint` 是物理限制。**寧可話少精簡，絕不超時爆音。**
+
+5. 輸出格式
+輸出純 JSON 陣列，包含 `id` 和 `text` 兩個欄位。
+
+6. 範例 (Example)
 **輸入:**
 [
-    {"id": 0, "constraint": "限 15 音節", "content": "Sakuramoto殺球 -> Tan擋網"},
-    {"id": 1, "constraint": "限 10 音節", "content": "中場間隙 (Gap)"},
-    {"id": 2, "constraint": "限 8 音節", "content": "殺球 -> 畫面中斷"}
+    {"id": 0, "constraint": "限 14 音節", "content": "[Serve] 戴資穎 - 發球 (過高) -> [Offense] 陳雨菲 - 撲球 (下壓)"},
+    {"id": 1, "constraint": "限 8 音節", "content": "[Score] 無 - 界內得分"},
+    {"id": 2, "constraint": "限 12 音節", "content": "[Gap] 對手懊惱"}
 ]
 **輸出:**
 [
-    {"id": 0, "text": "Sakuramoto起跳重殺，但Tan防守得非常穩健！"},
-    {"id": 1, "text": "這球雙方節奏都很快，稍微喘口氣。"},
-    {"id": 2, "text": "這球殺得非常兇！"}
+    {"id": 0, "text": "小戴這球發高了！陳雨菲沒放過機會直接下壓！"},
+    {"id": 1, "text": "落地得分！這球抓得太準了！"},
+    {"id": 2, "text": "小戴臉上露出了懊惱的表情。"}
 ]
 
-📊 **本段待處理列表：**
+📊 **待處理數據：**
 {{ event_data }}
 
 請輸出 JSON：
@@ -169,7 +184,7 @@ def _flush_chunk(results_list, chunk_data, global_counter_ref):
         global_counter_ref[0] += 1
 
 
-# ========== 7. 核心功能：處理單一影片 ==========
+# ========== 7. 核心功能：處理單一影片 (已修正時間軸排軸邏輯) ==========
 def process_single_video_stage2(video_path, event_json_path, output_folder):
     global NARRATIVE_HISTORY
 
@@ -183,156 +198,136 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
     try:
         with open(event_json_path, 'r', encoding='utf-8') as f: 
             data = json.load(f)
-            nested_events = data.get("events", []) if isinstance(data, dict) else data
-            video_uri = data.get("segment_video_uri", "") if isinstance(data, dict) else ""
-    except: return None
+            events = data.get("events", [])
+            video_uri = data.get("video_uri", "") or data.get("segment_video_uri", "")
+    except Exception as e:
+        print(f"❌ 讀取 JSON 失敗: {e}")
+        return None
 
-    if not nested_events: return None
+    if not events: return None
 
-    # --- A. 數據聚合邏輯 ---
-    RALLY_TYPES = ["Exchange", "Attack", "Defend"] 
-    chunk_events = [] 
-    global_id_counter = [0] 
-    last_committed_time = 0.0
-
-    # 1. INTRO
-    first_chunk_start = parse_time_str(nested_events[0].get("start_time", "0:00.0"))
-    intro_limit = int(first_chunk_start * SYLLABLES_PER_SEC)
-    if intro_limit >= 8 and intro_limit <= MAX_INTRO_OUTRO_SYLLABLES:
-        chunk_events.append({
-            "global_id": "INTRO",
-            "start_sec": 0.0,
-            "end_sec": first_chunk_start,
-            "limit": intro_limit,
-            "info": "開場空白"
-        })
-        last_committed_time = first_chunk_start
-    else:
-        last_committed_time = 0.0
+    # --- A. 智慧聚合邏輯 (Smart Aggregation) ---
+    narrative_blocks = []
+    current_block = []
+    block_start_time = 0.0
     
-    # 2. 聚合迴圈 (含向後合併邏輯)
-    buffer_chunk = None
+    events.sort(key=lambda x: parse_time_str(x.get("start_time", "0:00")))
 
-    for chunk in nested_events:
-        chunk_start = parse_time_str(chunk.get("start_time", "0:00.0"))
-        chunk_end = parse_time_str(chunk.get("end_time", "0:00.0"))
-        inner_list = chunk.get("events", [])
+    # 1. 處理開場
+    first_event_start = parse_time_str(events[0].get("start_time", "0:00"))
+    if first_event_start > 1.5:
+        narrative_blocks.append({
+            "type": "INTRO",
+            "start": 0.0,
+            "end": first_event_start,
+            "content": "開場/準備動作"
+        })
+
+    # 2. 遍歷事件並分組
+    last_event_end = 0.0
+    
+    for i, event in enumerate(events):
+        start = parse_time_str(event.get("start_time"))
+        end = parse_time_str(event.get("end_time"))
+        if end == 0.0: end = start + 1.0 
         
-        if not inner_list: continue
-
-        actions_str = " -> ".join([f"{ev.get('player')}{ev.get('action')}" for ev in inner_list])
-        is_crucial = any(ev.get('is_crucial') is True for ev in inner_list)
-        is_pure_rally = all(ev.get('category') in RALLY_TYPES for ev in inner_list) and not is_crucial
-
-        current_chunk = {
-            "start": chunk_start, 
-            "end": chunk_end, 
-            "info": actions_str,
-            "is_rally": is_pure_rally,
-            "is_crucial": is_crucial 
-        }
-
-        # --- Gap Detection ---
-        prev_end_candidate = buffer_chunk["end"] if buffer_chunk else last_committed_time
-        gap_duration = chunk_start - prev_end_candidate
+        cat = event.get("category", "General")
+        sub = event.get("subject") or event.get("player", "球員")
+        act = event.get("action", "")
+        det = event.get("detail", "")
         
-        if gap_duration > MIN_GAP_DURATION:
-            # 發現大間隙
-            if buffer_chunk:
-                # 檢查 buffer 是否太短？若是，直接被 Gap 吞噬 (刪除 buffer)
-                # 這避免產生 "Action (0.2s) -> Gap" 的怪異結構
-                buf_dur = buffer_chunk["end"] - buffer_chunk["start"]
-                if buf_dur < MERGE_THRESHOLD:
-                    # 吞噬：Gap 起點提前到 buffer 起點
-                    prev_end_candidate = buffer_chunk["start"]
-                    buffer_chunk = None # 丟棄 buffer
-                else:
-                    # 正常結算
-                    _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
-                    last_committed_time = buffer_chunk["end"]
-                    buffer_chunk = None
-                    prev_end_candidate = last_committed_time
-            
-            # 插入間隙事件
-            gap_chunk = {
-                "start": prev_end_candidate,
-                "end": chunk_start,
-                "info": "中場間隙 (Gap)",
-                "is_crucial": False
-            }
-            _flush_chunk(chunk_events, gap_chunk, global_id_counter)
-            last_committed_time = chunk_start
-            buffer_chunk = current_chunk
+        event_str = f"[{cat}] {sub} - {act}"
+        if det: event_str += f" ({det})"
 
+        gap_from_prev = start - last_event_end
+        should_start_new_block = False
+        
+        if not current_block:
+            should_start_new_block = True
+        elif gap_from_prev > 2.0: 
+            should_start_new_block = True
         else:
-            # --- 正常合併邏輯 ---
-            if buffer_chunk:
-                potential_dur = current_chunk["end"] - buffer_chunk["start"]
-                is_mergeable = (
-                    buffer_chunk["is_rally"] and 
-                    current_chunk["is_rally"] and 
-                    potential_dur <= MAX_RALLY_DURATION
-                )
-                
-                if is_mergeable:
-                    # 標準合併：向後延伸
-                    buffer_chunk["end"] = current_chunk["end"] 
-                    buffer_chunk["info"] += f" -> {current_chunk['info']}"
-                else:
-                    # 衝突：無法標準合併
-                    # 🔥 [新增] 強制向後合併檢查 (Force Merge Forward)
-                    # 如果 buffer 實在太短 (例如 0.2s)，為了不浪費，強制塞給 current
-                    buf_dur = buffer_chunk["end"] - buffer_chunk["start"]
-                    
-                    if buf_dur < MERGE_THRESHOLD:
-                        # 執行向後合併：Current 吸收 Buffer
-                        current_chunk["start"] = buffer_chunk["start"] # 時間前推
-                        current_chunk["info"] = f"{buffer_chunk['info']} -> {current_chunk['info']}" # 內容前置
-                        
-                        # 屬性繼承：若 buffer 是關鍵，合併後也視為關鍵 (避免漏報)
-                        if buffer_chunk["is_crucial"]:
-                            current_chunk["is_crucial"] = True
-                        
-                        # Buffer 被吸收，現在 Current 變成新的 Buffer
-                        buffer_chunk = current_chunk
-                    else:
-                        # Buffer 夠長，可以獨立生存
-                        _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
-                        last_committed_time = buffer_chunk["end"]
-                        buffer_chunk = current_chunk
-            else:
-                buffer_chunk = current_chunk
+            current_block_dur = end - block_start_time
+            if current_block_dur > MAX_RALLY_DURATION:
+                should_start_new_block = True
         
-    # 結算最後的 buffer
-    if buffer_chunk:
-        # 最後一段無法向後合併，只能依靠 _flush_chunk 的 padding 保護
-        _flush_chunk(chunk_events, buffer_chunk, global_id_counter)
-        last_committed_time = buffer_chunk["end"]
+        if should_start_new_block:
+            if current_block:
+                narrative_blocks.append({
+                    "type": "RALLY",
+                    "start": block_start_time,
+                    "end": last_event_end,
+                    "content": " -> ".join(current_block)
+                })
+                if gap_from_prev > 2.0:
+                    narrative_blocks.append({
+                        "type": "GAP",
+                        "start": last_event_end,
+                        "end": start,
+                        "content": "中場間隙/調整"
+                    })
 
-    # 3. OUTRO
-    outro_dur = total_duration - last_committed_time
-    outro_limit = int(outro_dur * SYLLABLES_PER_SEC)
-    
-    if outro_limit >= 8 and outro_limit <= MAX_INTRO_OUTRO_SYLLABLES:
-        chunk_events.append({
-            "global_id": "OUTRO", 
-            "start_sec": last_committed_time, 
-            "end_sec": total_duration, 
-            "limit": outro_limit, 
-            "info": "結尾空白"
+            current_block = [event_str]
+            block_start_time = start
+        else:
+            current_block.append(event_str)
+        
+        last_event_end = end
+
+    if current_block:
+        narrative_blocks.append({
+            "type": "RALLY",
+            "start": block_start_time,
+            "end": last_event_end,
+            "content": " -> ".join(current_block)
         })
 
-    # --- B. 呼叫 LLM ---
+    # 3. 處理結尾
+    if total_duration - last_event_end > 2.0:
+        narrative_blocks.append({
+            "type": "OUTRO",
+            "start": last_event_end,
+            "end": total_duration,
+            "content": "本段結束/重播畫面"
+        })
+
+    # --- B. 準備 LLM 輸入資料 (已修改：保存 raw_content) ---
+    llm_input_data = []
+    final_blocks_map = [] 
+
+    for idx, block in enumerate(narrative_blocks):
+        duration = block["end"] - block["start"]
+        if duration < 0.5: continue 
+
+        syllable_limit = int(duration * SYLLABLES_PER_SEC)
+        syllable_limit = max(syllable_limit, 6) 
+        
+        info_text = block["content"]
+        if block["type"] == "GAP": info_text = "[Gap] 中場休息/球員特寫"
+        if block["type"] == "INTRO": info_text = "[Intro] 比賽開始"
+
+        llm_input_data.append({
+            "id": idx,
+            "constraint": f"限 {syllable_limit} 音節",
+            "content": info_text
+        })
+        
+        # 🔥 修改處 1：保存原始內容以便後續判斷類型
+        final_blocks_map.append({
+            "id": idx,
+            "start": block["start"],
+            "end": block["end"],
+            "type": block["type"],
+            "raw_content": info_text.lower() # 轉小寫存起來
+        })
+
+    # --- C. 呼叫 LLM ---
     if NARRATIVE_HISTORY:
         recent_history = NARRATIVE_HISTORY[-HISTORY_WINDOW_SIZE:]
         history_str = "\n".join([f"- {h}" for h in recent_history])
     else:
-        history_str = "這是比賽的第一個片段，請開始精彩的解說。"
+        history_str = "這是比賽的第一個片段。"
 
-    llm_input_data = []
-    for e in chunk_events:
-        llm_input_data.append({"id": e["global_id"], "constraint": f"限 {e['limit']} 音節", "content": e["info"]})
-    
     try:
         res = pipeline_s2.run({
             "add_video": {"uri": video_uri},
@@ -342,73 +337,100 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
                 }
         })
         reply = res["llm"]["replies"][0].strip()
-        if reply.startswith("```"): reply = reply.split("\n", 1)[1].rsplit("\n", 1)[0]
+        if "```" in reply:
+            reply = re.search(r'\[.*\]', reply, re.DOTALL).group()
+        
         generated_list = json.loads(reply)
-        generated_map = {str(item["id"]): item["text"] for item in generated_list}
+        generated_map = {item["id"]: item["text"] for item in generated_list}
     except Exception as e:
-        print(f"❌ [Stage 2 錯誤] {e}")
+        print(f"❌ [Stage 2 LLM 錯誤] {e}")
         return None
 
-    # --- C. 輸出結果 ---
-    commentary = []
-    current_segment_narrative = [] 
+    # --- D. 輸出結果 (已修改：動態排軸優化) ---
     
-    for chunk in chunk_events:
-        gid = str(chunk["global_id"])
-        text_content = generated_map.get(gid)
-        if not text_content: continue 
+    # 🔥 定義動作延遲表 (單位：秒)
+    DELAY_MAP = {
+        "setup": 2.2,    # 發球/準備：動作長，往後推 2.2 秒再講
+        "serve": 2.2,    
+        "offense": 0.6,  # 殺球/進攻：模擬反應時間 0.6 秒
+        "smash": 0.6,    
+        "defense": 0.8,  # 防守
+        "score": 0.1,    # 得分：球落地馬上喊
+        "gap": 0.5,      # 間隙：稍微留白
+        "intro": 0.0,    
+        "default": 0.8   
+    }
+    
+    MIN_BLOCK_DURATION = 1.3 
+    commentary = []
+    segment_narrative_text = []
+    
+    # 指針：記錄上一句話結束時間，防止重疊
+    last_speech_end_time = 0.0
 
-        duration = chunk["end_sec"] - chunk["start_sec"]
-        
-        validation_duration = duration
-        if gid in ["INTRO", "OUTRO"]: validation_duration = min(duration, 5.0)
-        
-        estimated_dur = estimate_speech_time(text_content)
-        if estimated_dur > (validation_duration * 1.2):
-            ratio = (validation_duration * 1.2) / estimated_dur
-            safe_length = int(len(text_content) * ratio)
-            text_content = text_content[:safe_length].rstrip("，,")
+    for block_meta in final_blocks_map:
+        bid = block_meta["id"]
+        text = generated_map.get(bid, "")
+        if not text: continue
 
-        chunk_info_lower = chunk["info"].lower()
-        if "gap" in chunk_info_lower:
-            emotion = "平穩"
-        else:
-            emotion = "激動" if "殺球" in chunk_info_lower or "得分" in chunk_info_lower or "attack" in chunk_info_lower else "平穩"
-
-        if commentary and len(text_content) >= 2 and len(commentary[-1]["text"]) >= 2:
-            check_len = min(5, len(text_content), len(commentary[-1]["text"]))
-            if text_content[:check_len] == commentary[-1]["text"][:check_len]:
-                commentary[-1]["end_time"] = seconds_to_timecode(chunk["end_sec"])
-                prev_start = parse_time_str(commentary[-1]["start_time"])
-                new_dur = chunk["end_sec"] - prev_start
-                commentary[-1]["time_range"] = format_duration(new_dur)
-                continue
+        # 1. 取出原始資料
+        raw_start = block_meta["start"]
+        raw_content = block_meta.get("raw_content", "")
+        block_type = block_meta["type"]
         
-        if text_content:
-            current_segment_narrative.append(text_content)
+        # 2. 判斷延遲時間
+        adjusted_start = raw_start
+
+        # 4. 🔥 防重疊機制
+        if adjusted_start < last_speech_end_time + 0.15:
+            adjusted_start = last_speech_end_time + 0.15
+            
+        # 5. 計算結束時間 (基於文字長度動態估算)
+        estimated_speech_dur = len(text) / SYLLABLES_PER_SEC
+        target_duration = max(estimated_speech_dur, MIN_BLOCK_DURATION)
+        
+        adjusted_end = adjusted_start + target_duration
+        
+        # 6. 邊界檢查
+        if adjusted_end > total_duration:
+            adjusted_end = total_duration
+            if adjusted_end - adjusted_start < 1.0:
+                adjusted_start = max(0, adjusted_end - 1.0)
+
+        # 7. 更新指針
+        last_speech_end_time = adjusted_end
+
+        # 8. 情緒標籤
+        emotion = "平穩"
+        if block_type == "RALLY":
+            if any(k in raw_content for k in ["offense", "score", "smash", "kill"]):
+                emotion = "激動"
+        elif block_type == "GAP":
+            emotion = "舒緩"
 
         commentary.append({
-            "start_time": seconds_to_timecode(chunk["start_sec"]),
-            "end_time": seconds_to_timecode(chunk["end_sec"]),
-            "time_range": format_duration(duration),
+            "start_time": seconds_to_timecode(adjusted_start),
+            "end_time": seconds_to_timecode(adjusted_end),
+            "time_range": format_duration(adjusted_end - adjusted_start),
             "emotion": emotion,
-            "text": text_content
+            "text": text
         })
+        segment_narrative_text.append(text)
 
-    if current_segment_narrative:
-        full_segment_text = " ".join(current_segment_narrative)
-        NARRATIVE_HISTORY.append(full_segment_text)
-        if len(NARRATIVE_HISTORY) > 20: 
-            NARRATIVE_HISTORY.pop(0)
+    # 更新歷史紀錄
+    if segment_narrative_text:
+        NARRATIVE_HISTORY.append(" ".join(segment_narrative_text))
+        if len(NARRATIVE_HISTORY) > 10: NARRATIVE_HISTORY.pop(0)
 
-    output_filename = f"{base_name}.json"
-    output_path = os.path.join(output_folder, output_filename)
+    # 存檔
+    output_path = os.path.join(output_folder, f"{base_name}.json")
     if commentary:
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump({"segment": os.path.basename(video_path), "commentary": commentary}, f, ensure_ascii=False, indent=2)
+            json.dump({"segment": base_name, "commentary": commentary}, f, ensure_ascii=False, indent=2)
         return output_path
     else:
         return None
+
 
 # ========== 8. 獨立運行模式 ==========
 if __name__ == "__main__":

@@ -15,12 +15,22 @@ client = texttospeech.TextToSpeechClient()
 
 # 情緒到語速(rate)和音量(volume_gain_db)的映射
 EMOTION_TTS_PARAMS = {
-    "激動": {"rate": 1.7, "volume_gain_db": 3.5},
-    "平穩": {"rate": 1.5, "volume_gain_db": 0.0},
-    "緊張": {"rate": 1.6, "volume_gain_db": 2.0},
-    "疑問": {"rate": 1.0, "volume_gain_db": 1.5},
-    "強調": {"rate": 1.2, "volume_gain_db": 3.0},
-    "精彩": {"rate": 1.5, "volume_gain_db": 3.0},
+    # === 基準線 ===
+    "平穩": {"rate": 1.5, "volume_gain_db": 0.0},   # [Exchange/Setup] 標準語速
+
+    # === 加速區 (高張力) ===
+    "激動": {"rate": 1.8, "volume_gain_db": 3.5},   # [Score/Smash/Outro] +0.3 (明顯變快，語氣高昂)
+    "緊張": {"rate": 1.65, "volume_gain_db": 2.0},  # [Defense/Foul] +0.15 (稍快，帶有急促感)
+    
+    # === 減速區 (低張力/細節) ===
+    "專業": {"rate": 1.35, "volume_gain_db": 1.0},  # [Replay] -0.15 (稍慢，為了讓技術分析聽得更清楚，帶權威感)
+    "舒緩": {"rate": 1.2, "volume_gain_db": 0.0},   # [Intro/Gap] -0.3 (慢，營造放鬆、調整呼吸的感覺)
+    "遺憾": {"rate": 1.25, "volume_gain_db": -2.0}, # [Miss/Error] -0.25 (慢且小聲，表現惋惜與停頓)
+
+    # === 備用區 ===
+    "疑問": {"rate": 1.4, "volume_gain_db": 1.5},   # (略慢於基準，表示困惑)
+    "強調": {"rate": 1.45, "volume_gain_db": 2.5},  # (接近基準，但音量加大)
+    "精彩": {"rate": 1.6, "volume_gain_db": 3.0},   # (介於緊張與激動之間)
 }
 
 def clean_emotion_tag(text):

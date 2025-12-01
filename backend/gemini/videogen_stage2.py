@@ -15,9 +15,9 @@ cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b710
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
 # ========== 2. 關鍵參數 ==========
-SYLLABLES_PER_SEC = 4.8       
+SYLLABLES_PER_SEC = 4.5      
 MIN_EVENT_DURATION = 1.0      
-MAX_RALLY_DURATION = 6.0
+MAX_RALLY_DURATION = 4.5
 MIN_GAP_DURATION = 3.0        
 MAX_INTRO_OUTRO_SYLLABLES = 30 
 MERGE_THRESHOLD = 1.2 # [新增] 強制合併閾值：若片段短於 1.2 秒，強制合併到下一段
@@ -94,22 +94,11 @@ narrative_template = """
 3. 任務執行 (Tasks)
 你的工作是要將一系列的事件轉化為生動的解說文本：
 
-- **解讀規則**：[分類] player - action (detail)
-    *範例：`[Offense] 戴資穎 - 殺球 (貼網)`*
-
-- **語氣與節奏指引 (Tone & Pacing)**：
-    - **🟢 [Setup] / [Exchange] (戰術分析)**：
-        * **語氣**：冷靜、清晰。
-        * **重點**：描述球路佈局。例如：「雙方還在互相試探網前手感...」
-    - **🟡 [Offense] / [Defense] (攻防張力)**：
-        * **語氣**：**急促、緊湊！**
-        * **重點**：使用「動作-反應」邏輯。例如：「小戴突然起跳重殺！雨菲反應很快直接擋回！」
-    - **🔴 [Score] / [Result] (情緒釋放)**：
-        * **語氣**：**高昂、激動！**
-        * **重點**：讚嘆得分手段或惋惜失誤。例如：「哇！這球殺得太刁鑽了！完全沒機會！」
-    - **🔵 [Gap] / [Intro] / [Outro] (呼吸留白)**：
-        * **語氣**：舒緩、感性。
-        * **重點**：填補空白，但不要填滿。評論上一球的心理博弈，或預告下一球。
+- **特殊任務指引 (Special Tasks)**：
+    - **[Intro]**: 影片剛開始。請簡單開場，介紹選手或當前比分局勢。
+    - **[Gap]**: 比賽間隙。請描述球員的心理狀態、擦汗、換球、調整呼吸。
+    - **[Outro]**: 影片結束。請快速總結剛剛這球的結果、得分者。
+    - **[Replay]**: 精彩回放/慢動作。請**深入分析**剛才動作的技術細節（如：手腕變化、假動作、腳步移動），語氣專業且帶有讚嘆。
 
 4. 嚴格禁令 (Strict Prohibitions)
 ⛔️ **違規將導致系統錯誤：**
@@ -191,6 +180,7 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
     os.makedirs(output_folder, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(video_path))[0]
     
+    # 0. 基礎資訊讀取
     try:
         with VideoFileClip(video_path) as clip: total_duration = clip.duration
     except: total_duration = 30.0 
@@ -206,223 +196,309 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
 
     if not events: return None
 
-    # --- A. 智慧聚合邏輯 (Smart Aggregation) ---
+    # ==========================================
+    # Phase 1: 事件聚合 (Aggregation) - 強制切片版
+    # ==========================================
     narrative_blocks = []
-    current_block = []
-    block_start_time = 0.0
+    current_block_events = []
+    block_start_raw = 0.0
     
     events.sort(key=lambda x: parse_time_str(x.get("start_time", "0:00")))
-
-    # 1. 處理開場
-    first_event_start = parse_time_str(events[0].get("start_time", "0:00"))
-    if first_event_start > 1.5:
-        narrative_blocks.append({
-            "type": "INTRO",
-            "start": 0.0,
-            "end": first_event_start,
-            "content": "開場/準備動作"
-        })
-
-    # 2. 遍歷事件並分組
     last_event_end = 0.0
     
     for i, event in enumerate(events):
         start = parse_time_str(event.get("start_time"))
+        if start > total_duration - 0.5: continue
+
         end = parse_time_str(event.get("end_time"))
-        if end == 0.0: end = start + 1.0 
+        if end == 0.0: end = start + 1.0
         
         cat = event.get("category", "General")
         sub = event.get("subject") or event.get("player", "球員")
         act = event.get("action", "")
         det = event.get("detail", "")
-        
-        event_str = f"[{cat}] {sub} - {act}"
-        if det: event_str += f" ({det})"
+        event_str = f"[{cat}] {sub} - {act} ({det})"
 
-        gap_from_prev = start - last_event_end
-        should_start_new_block = False
+        # --- 🔥 修改點：強制切片邏輯 ---
+        current_block_duration = end - block_start_raw
+        gap_from_last = start - last_event_end
         
-        if not current_block:
-            should_start_new_block = True
-        elif gap_from_prev > 2.0: 
-            should_start_new_block = True
-        else:
-            current_block_dur = end - block_start_time
-            if current_block_dur > MAX_RALLY_DURATION:
-                should_start_new_block = True
-        
-        if should_start_new_block:
-            if current_block:
+        is_new_block = False
+        if not current_block_events:
+            is_new_block = True
+        elif gap_from_last > 1.2:  # 間隔 > 1.2s 斷句
+            is_new_block = True
+        elif len(current_block_events) >= 3: # 🔥 動作數量 >= 3 強制換句
+            is_new_block = True
+        elif current_block_duration > 3.5:   # 🔥 時間長度 > 3.5s 強制換句
+            is_new_block = True
+            
+        if is_new_block:
+            if current_block_events:
                 narrative_blocks.append({
                     "type": "RALLY",
-                    "start": block_start_time,
-                    "end": last_event_end,
-                    "content": " -> ".join(current_block)
+                    "raw_start": block_start_raw,
+                    "raw_end": last_event_end,
+                    "content": " -> ".join(current_block_events)
                 })
-                if gap_from_prev > 2.0:
-                    narrative_blocks.append({
-                        "type": "GAP",
-                        "start": last_event_end,
-                        "end": start,
-                        "content": "中場間隙/調整"
-                    })
-
-            current_block = [event_str]
-            block_start_time = start
+            current_block_events = [event_str]
+            block_start_raw = start
         else:
-            current_block.append(event_str)
+            current_block_events.append(event_str)
         
         last_event_end = end
 
-    if current_block:
+    if current_block_events:
         narrative_blocks.append({
             "type": "RALLY",
-            "start": block_start_time,
-            "end": last_event_end,
-            "content": " -> ".join(current_block)
+            "raw_start": block_start_raw,
+            "raw_end": last_event_end,
+            "content": " -> ".join(current_block_events)
         })
 
-    # 3. 處理結尾
-    if total_duration - last_event_end > 2.0:
-        narrative_blocks.append({
-            "type": "OUTRO",
-            "start": last_event_end,
-            "end": total_duration,
-            "content": "本段結束/重播畫面"
+    # ==========================================
+    # Phase 2: 預先排程 (Pre-Scheduling) - 膨脹與填空
+    # ==========================================
+    scheduled_tasks = [] 
+    audio_cursor = 0.0 
+    
+    DELAY_MAP = {
+        "setup": 2.0, "serve": 2.0, "offense": 0.6, "smash": 0.5,    
+        "defense": 0.7, "score": 0.1, "gap": 0.0, "intro": 0.0, "outro": 0.0, "default": 0.8   
+    }
+
+    # --- 🔥 修改點 1: Intro 填空 ---
+    first_block_start = narrative_blocks[0]["raw_start"] if narrative_blocks else total_duration
+    if first_block_start > 3.0:
+        intro_dur = min(first_block_start - 0.5, 6.0)
+        scheduled_tasks.append({
+            "id": "intro",
+            "final_start": 0.0,
+            "final_end": intro_dur,
+            "duration": intro_dur,
+            "type": "INTRO",
+            "raw_content": "比賽開始",
+            "prompt_constraint": f"限 {int(intro_dur * SYLLABLES_PER_SEC)} 音節",
+            "prompt_content": "[Intro] 這是比賽開始，請做簡單開場介紹。"
         })
+        audio_cursor = intro_dur
 
-    # --- B. 準備 LLM 輸入資料 (已修改：保存 raw_content) ---
-    llm_input_data = []
-    final_blocks_map = [] 
-
+    # --- 迴圈排程 ---
     for idx, block in enumerate(narrative_blocks):
-        duration = block["end"] - block["start"]
-        if duration < 0.5: continue 
-
-        syllable_limit = int(duration * SYLLABLES_PER_SEC)
-        syllable_limit = max(syllable_limit, 6) 
+        # A. 理想時間
+        delay = 0.8
+        content_lower = block["content"].lower()
+        for k, v in DELAY_MAP.items():
+            if k in content_lower: delay = v; break
+        ideal_start = block["raw_start"] + delay
         
-        info_text = block["content"]
-        if block["type"] == "GAP": info_text = "[Gap] 中場休息/球員特寫"
-        if block["type"] == "INTRO": info_text = "[Intro] 比賽開始"
+        # --- 🔥 修改點 2: Gap 填空 ---
+        gap_duration = ideal_start - audio_cursor
+        if gap_duration > 4.0:
+            fill_dur = min(gap_duration - 0.5, 5.0)
+            gap_start = audio_cursor + 0.2
+            scheduled_tasks.append({
+                "id": f"gap_{idx}",
+                "final_start": gap_start,
+                "final_end": gap_start + fill_dur,
+                "duration": fill_dur,
+                "type": "GAP",
+                "raw_content": "間隙",
+                "prompt_constraint": f"限 {int(fill_dur * SYLLABLES_PER_SEC)} 音節",
+                "prompt_content": "[Gap] 雙方調整節奏/球員心理/準備下一球"
+            })
+            audio_cursor = gap_start + fill_dur
 
-        llm_input_data.append({
-            "id": idx,
-            "constraint": f"限 {syllable_limit} 音節",
-            "content": info_text
-        })
+        # C. 排程當前 Block
+        start_time = max(ideal_start, audio_cursor + 0.2)
         
-        # 🔥 修改處 1：保存原始內容以便後續判斷類型
-        final_blocks_map.append({
+        # --- 🔥 修改點 3: 時間膨脹計算 ---
+        raw_span = block["raw_end"] - block["raw_start"]
+        base_min_duration = 3.5 # 保底 3.5 秒
+        target_dur = min(raw_span + 2.0, 6.0) # 原始+2秒，上限6秒
+        target_dur = max(target_dur, base_min_duration) # 應用保底
+
+        # Lookahead: 只有遇到關鍵球才稍微讓路
+        if idx < len(narrative_blocks) - 1:
+            next_content = narrative_blocks[idx+1]["content"].lower()
+            next_raw_start = narrative_blocks[idx+1]["raw_start"]
+            if "score" in next_content or "smash" in next_content:
+                next_ideal = next_raw_start + 0.5
+                if next_ideal < start_time + target_dur:
+                    compressed = next_ideal - start_time
+                    target_dur = max(compressed, 2.5)
+
+        end_time = start_time + target_dur
+        if end_time > total_duration: end_time = total_duration
+        
+        final_duration = end_time - start_time
+        if final_duration < 0.8: continue
+
+        syllable_count = int(final_duration * SYLLABLES_PER_SEC)
+        syllable_count = max(syllable_count, 5)
+
+        scheduled_tasks.append({
             "id": idx,
-            "start": block["start"],
-            "end": block["end"],
+            "final_start": start_time,
+            "final_end": end_time,
+            "duration": final_duration,
             "type": block["type"],
-            "raw_content": info_text.lower() # 轉小寫存起來
+            "raw_content": block["content"],
+            "prompt_constraint": f"限 {syllable_count} 音節",
+            "prompt_content": block["content"]
+        })
+        audio_cursor = end_time
+
+    # 目的：避免最後剩餘時間太長(如17秒)導致AI寫作文。將其拆解為「總結」+「回放分析」。
+    
+    remaining_time = total_duration - audio_cursor
+    
+    if remaining_time > 12.0:
+        # 情況 A: 剩餘時間充裕 -> 拆分為 [Outro] + [Replay]
+        
+        # 1. 快速總結 (Outro) - 固定給 5 秒
+        outro_dur = 5.0
+        scheduled_tasks.append({
+            "id": "outro_summary",
+            "final_start": audio_cursor + 0.2,
+            "final_end": audio_cursor + 0.2 + outro_dur,
+            "duration": outro_dur,
+            "type": "OUTRO",
+            "raw_content": "結尾總結",
+            "prompt_constraint": f"限 {int(outro_dur * SYLLABLES_PER_SEC)} 音節",
+            "prompt_content": "[Outro] 本回合結束，快速總結得分關鍵。"
+        })
+        # 更新指針，為下一段做準備
+        audio_cursor += (0.2 + outro_dur)
+
+        # 2. 回放分析 (Replay) - 填補剩餘時間
+        # 計算可用時間：剩餘時間 - 緩衝 1.0秒
+        # 設定上限 8.0 秒 (避免講太久)
+        replay_dur = min(remaining_time - outro_dur - 1.0, 8.0) 
+        
+        if replay_dur > 3.0:
+            scheduled_tasks.append({
+                "id": "outro_replay",
+                "final_start": audio_cursor + 0.5,
+                "final_end": audio_cursor + 0.5 + replay_dur,
+                "duration": replay_dur,
+                "type": "REPLAY",
+                "raw_content": "慢動作分析",
+                "prompt_constraint": f"限 {int(replay_dur * SYLLABLES_PER_SEC)} 音節",
+                "prompt_content": "[Replay] 這是精彩重播畫面，請深入分析剛才動作的技術細節(如假動作或落點)。"
+            })
+
+    elif remaining_time > 3.0:
+        # 情況 B: 剩餘時間正常 -> 只有 [Outro]
+        # 設定上限 6.0 秒
+        outro_dur = min(remaining_time - 0.5, 6.0)
+        scheduled_tasks.append({
+            "id": "outro",
+            "final_start": audio_cursor + 0.2,
+            "final_end": audio_cursor + 0.2 + outro_dur,
+            "duration": outro_dur,
+            "type": "OUTRO",
+            "raw_content": "結尾",
+            "prompt_constraint": f"限 {int(outro_dur * SYLLABLES_PER_SEC)} 音節",
+            "prompt_content": "[Outro] 本回合結束，總結剛才的精彩表現。"
         })
 
-    # --- C. 呼叫 LLM ---
+    if not scheduled_tasks:
+        print(f"⚠️ [Skip] {base_name}: 無有效任務")
+        return None
+
+    # ==========================================
+    # Phase 3: 生成解說 (Generation) - 帶 Context 版
+    # ==========================================
+    
+    # 1. 準備任務數據
+    llm_input_data = []
+    for task in scheduled_tasks:
+        llm_input_data.append({
+            "id": task["id"],
+            "constraint": task["prompt_constraint"], 
+            "content": task["prompt_content"]
+        })
+        
+    # 2. 準備歷史紀錄 (Context)
     if NARRATIVE_HISTORY:
         recent_history = NARRATIVE_HISTORY[-HISTORY_WINDOW_SIZE:]
         history_str = "\n".join([f"- {h}" for h in recent_history])
     else:
-        history_str = "這是比賽的第一個片段。"
+        history_str = "這是比賽的第一個片段，請直接開始解說。"
 
     try:
+        # 3. 執行 Pipeline (🔥 關鍵：必須傳入 prev_context)
         res = pipeline_s2.run({
             "add_video": {"uri": video_uri},
             "prompt_builder": {
                 "event_data": json.dumps(llm_input_data, ensure_ascii=False, indent=2),
-                "prev_context": history_str 
-                }
+                "prev_context": history_str  # <--- 這行就是解決 Missing input 的關鍵
+            }
         })
+
         reply = res["llm"]["replies"][0].strip()
+        
+        # 清洗 JSON
         if "```" in reply:
-            reply = re.search(r'\[.*\]', reply, re.DOTALL).group()
+            match = re.search(r'\[.*\]', reply, re.DOTALL)
+            if match: reply = match.group()
         
         generated_list = json.loads(reply)
-        generated_map = {item["id"]: item["text"] for item in generated_list}
+        generated_map = {str(item["id"]): item["text"] for item in generated_list}
+        
     except Exception as e:
         print(f"❌ [Stage 2 LLM 錯誤] {e}")
         return None
 
-    # --- D. 輸出結果 (已修改：動態排軸優化) ---
+    # ==========================================
+    # Phase 4: 輸出組裝 (Assembly)
+    # ==========================================
     
-    # 🔥 定義動作延遲表 (單位：秒)
-    DELAY_MAP = {
-        "setup": 2.2,    # 發球/準備：動作長，往後推 2.2 秒再講
-        "serve": 2.2,    
-        "offense": 0.6,  # 殺球/進攻：模擬反應時間 0.6 秒
-        "smash": 0.6,    
-        "defense": 0.8,  # 防守
-        "score": 0.1,    # 得分：球落地馬上喊
-        "gap": 0.5,      # 間隙：稍微留白
-        "intro": 0.0,    
-        "default": 0.8   
-    }
-    
-    MIN_BLOCK_DURATION = 1.3 
     commentary = []
-    segment_narrative_text = []
+    segment_texts = []
     
-    # 指針：記錄上一句話結束時間，防止重疊
-    last_speech_end_time = 0.0
-
-    for block_meta in final_blocks_map:
-        bid = block_meta["id"]
-        text = generated_map.get(bid, "")
+    for task in scheduled_tasks:
+        tid = str(task["id"]) # 轉字串
+        text = generated_map.get(tid, "")
         if not text: continue
-
-        # 1. 取出原始資料
-        raw_start = block_meta["start"]
-        raw_content = block_meta.get("raw_content", "")
-        block_type = block_meta["type"]
         
-        # 2. 判斷延遲時間
-        adjusted_start = raw_start
-
-        # 4. 🔥 防重疊機制
-        if adjusted_start < last_speech_end_time + 0.15:
-            adjusted_start = last_speech_end_time + 0.15
-            
-        # 5. 計算結束時間 (基於文字長度動態估算)
-        estimated_speech_dur = len(text) / SYLLABLES_PER_SEC
-        target_duration = max(estimated_speech_dur, MIN_BLOCK_DURATION)
+        # 🔥 修改：增強版情緒判斷
+        emotion = "平穩" 
+        content_lower = task["raw_content"].lower()
+        task_type = task["type"]
         
-        adjusted_end = adjusted_start + target_duration
-        
-        # 6. 邊界檢查
-        if adjusted_end > total_duration:
-            adjusted_end = total_duration
-            if adjusted_end - adjusted_start < 1.0:
-                adjusted_start = max(0, adjusted_end - 1.0)
-
-        # 7. 更新指針
-        last_speech_end_time = adjusted_end
-
-        # 8. 情緒標籤
-        emotion = "平穩"
-        if block_type == "RALLY":
-            if any(k in raw_content for k in ["offense", "score", "smash", "kill"]):
-                emotion = "激動"
-        elif block_type == "GAP":
+        if task_type == "INTRO":
             emotion = "舒緩"
+        elif task_type == "OUTRO":
+            emotion = "激動" 
+        elif task_type == "REPLAY":  # 🔥 新增這行
+            emotion = "專業"       # 回放分析時使用專業/分析語氣
+        elif task_type == "GAP":
+            emotion = "舒緩"
+        elif any(k in content_lower for k in ["score", "smash", "kill", "won", "winner"]):
+            emotion = "激動"
+        elif any(k in content_lower for k in ["defense", "save", "foul", "out", "mistake"]):
+            emotion = "緊張"
+        elif any(k in content_lower for k in ["serve", "prepare"]):
+            emotion = "舒緩"
+        elif any(k in content_lower for k in ["miss", "error", "fail"]):
+            emotion = "遺憾"
 
         commentary.append({
-            "start_time": seconds_to_timecode(adjusted_start),
-            "end_time": seconds_to_timecode(adjusted_end),
-            "time_range": format_duration(adjusted_end - adjusted_start),
+            "start_time": seconds_to_timecode(task["final_start"]),
+            "end_time": seconds_to_timecode(task["final_end"]),
+            "time_range": format_duration(task["duration"]),
             "emotion": emotion,
             "text": text
         })
-        segment_narrative_text.append(text)
+        segment_texts.append(text)
 
-    # 更新歷史紀錄
-    if segment_narrative_text:
-        NARRATIVE_HISTORY.append(" ".join(segment_narrative_text))
+    # (後續存檔部分保持不變)
+    if segment_texts:
+        NARRATIVE_HISTORY.append(" ".join(segment_texts))
         if len(NARRATIVE_HISTORY) > 10: NARRATIVE_HISTORY.pop(0)
 
-    # 存檔
     output_path = os.path.join(output_folder, f"{base_name}.json")
     if commentary:
         with open(output_path, "w", encoding="utf-8") as f:

@@ -80,6 +80,7 @@ event_analysis_template = """
 - **通用性**：無論是單人運動 (羽球) 還是團體運動 (籃球)，請依據比賽節奏記錄關鍵事件。
 - **完整覆蓋**：請依時間順序記錄，從影片開始到結束，不要遺漏任何具備戰術意義的動作。
 - **重複確認**：每一個影片片段開始前請務必確認{{intro}}的資料，確保你理解參賽者身份與賽況。
+- **語言設定**：請使用我指定的語言填寫JSON的欄位。
 
 4. 禁止做的事 (Strict Prohibitions)
 ⛔️ **嚴格禁令 (違者導致系統錯誤)：**
@@ -91,8 +92,8 @@ event_analysis_template = """
 
 5. JSON 欄位定義 (Field Definitions)
 輸出一個 JSON 陣列，每個物件需包含：
-- `start_time`: (String) 動作開始時間。
-- `end_time`: (String) 動作結束時間 (若是瞬間擊球，可與 start_time 相近)。
+- `start_time`: (String) 動作開始時間(時間格式：HH:MM:SS.s)。
+- `end_time`: (String) 動作結束時間，若是瞬間擊球，設定為start_time+1(時間格式：HH:MM:SS.s)。
 - `player`: (String) 執行動作的主體 (球員名、隊名)。
 - `action`: (String) 具體動作名稱 (如: 殺球, 三分出手)。
 - `detail`: (String, Optional) 動作細節描述。對於關鍵球或精彩動作，請務必描述軌跡或質量 (如: "貼網而過", "滑拍假動作")；對於普通來回可留空。
@@ -206,6 +207,7 @@ def process_single_video_stage1(video_path, output_folder, intro_text):
         
         final_event_data = {
             "segment_video_uri": video_uri,
+            "intro": intro_text,
             "events": processed_events
         }
         

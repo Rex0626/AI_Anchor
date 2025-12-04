@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>賽場揚聲 - 畢業專題海報</title>
+    
+    <!-- 引入 Tailwind CSS：這是一個快速樣式庫，負責處理顏色、排版、間距 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 FontAwesome：負責海報上的所有圖示 (例如：麥克風、獎盃、眼睛圖案) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        /* 引入 Google Fonts 思源黑體，讓中文字型更漂亮 */
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0f2f5; /* 網頁背景色 (海報外的顏色) */
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* 【海報尺寸設定區】
+           這裡設定了 A1 紙張的像素比例 (約 1684 x 2384 px)。
+           如果您需要更改海報大小，請調整這裡的 width 和 height。
+        */
+        .poster-container {
+            width: 1684px; 
+            height: 2384px;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2); /* 陰影效果 */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 卡片樣式：海報中白色圓角的區塊 */
+        .section-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 漸層文字特效 */
+        .gradient-text {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 流程圖箭頭樣式 */
+        .tech-step {
+            position: relative;
+        }
+        
+        .tech-step::after {
+            content: '➜'; /* 箭頭符號 */
+            position: absolute;
+            right: -20px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            font-size: 24px;
+        }
+        .tech-step:last-child::after {
+            content: ''; /* 最後一步不需要箭頭 */
+        }
+
+        /* 連接線樣式 */
+        .connector-line {
+            position: absolute;
+            background-color: #cbd5e1;
+            z-index: 0;
+        }
+
+        /* 【新增】自定義清單樣式 - 用於關鍵技術亮點 */
+        .highlight-item {
+            position: relative;
+            padding-left: 1.5rem;
+            border-left: 4px solid #3b82f6; /* 預設藍色邊框 */
+            margin-bottom: 1.5rem;
+        }
+        .highlight-item:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ========================================= */
+        /* 【新增】列印專用樣式             */
+        /* 解決版面亂掉與邊距問題            */
+        /* ========================================= */
+        @media print {
+            /* 1. 設定紙張大小為 A1，並移除所有預設邊距 */
+            @page {
+                size: A1 portrait; /* A1 直式 */
+                margin: 0; /* 告訴瀏覽器/列印驅動程式不要加邊距 */
+            }
+
+            /* 2. 重設 Body */
+            body {
+                margin: 0;
+                padding: 0;
+                background: white;
+                /* 移除螢幕版的 Flex 置中，改為 Block 以填滿頁面 */
+                display: block; 
+                /* 寬高設為 100% 以適應 @page 的大小 (即 A1) */
+                width: 100%;
+                height: 100%;
+            }
+
+            /* 3. 針對海報容器進行調整 - 實現完全貼合 */
+            .poster-container {
+                margin: 0;
+                padding: 3rem; /* 保持內部的 p-12 (約 3rem) */
+                /* 強制填滿紙張 */
+                width: 100%; 
+                height: 100%;
+                max-width: none;
+                max-height: none;
+                
+                /* 移除螢幕版的裝飾 */
+                box-shadow: none; 
+                border: none;
+                border-radius: 0; /* 移除圓角，確保角落填滿 */
+                
+                /* 4. 強制列印背景圖形與顏色 */
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                
+                /* 5. 避免分頁 */
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ================================================== -->
+    <!--                  海報內容開始                      -->
+    <!-- ================================================== -->
+    <div class="poster-container p-12 text-slate-800">
+        
+        <!-- 
+           【區域 1：頂部標題區】(Header)
+           包含：專題名稱、副標題、Hashtag 標籤、年份 
+        -->
+        <header class="flex justify-between items-center border-b-4 border-blue-600 pb-6 mb-8">
+            <div class="w-3/4">
+                <h1 class="text-8xl font-black tracking-tight text-slate-900 mb-2">賽場揚聲</h1>
+                <h2 class="text-4xl font-bold text-blue-600 mb-4">融合多模態 AI 的即時賽事解說平台</h2>
+            
+                <!-- Hashtag 標籤區 -->
+                <div class="flex gap-4">
+                    <span class="bg-blue-100 text-blue-800 text-2xl px-4 py-1 rounded-full font-semibold">#電腦視覺</span>
+                    <span class="bg-blue-100 text-blue-800 text-2xl px-4 py-1 rounded-full font-semibold">#體育分析</span>
+                    <span class="bg-blue-100 text-blue-800 text-2xl px-4 py-1 rounded-full font-semibold">#即時轉播</span>
+                    <span class="bg-orange-100 text-orange-800 text-2xl px-4 py-1 rounded-full font-semibold">#GenAI</span>
+                </div>
+            </div>
+            <!-- 右上角年份區 -->
+            <div class="w-1/4 text-right">
+                <div class="text-xl font-bold text-slate-500">畢業專題發表</div>
+                <div class="text-6xl text-slate-200 font-black mt-2">2025</div>
+            </div>
+        </header>
+
+        <!-- 
+           【主要排版網格】(Main Grid Layout)
+           這裡將頁面分為 12 等份，分別分配給左、中、右三個欄位
+        -->
+        <div class="grid grid-cols-12 gap-8 flex-grow">
+
+            <!-- 
+               【區域 2：左側欄位】(LEFT COLUMN) - 佔 30% 寬度
+               內容：背景動機、核心解決方案、效益總結 (新位置)
+            -->
+            <div class="col-span-4 flex flex-col gap-6"> <!-- gap-8 改為 gap-6 以節省空間 -->
+                
+                <!-- 2-1. 背景與動機區塊 (橘色邊框) -->
+                <div class="section-card p-6 border-l-8 border-orange-500 h-auto">
+                    <h3 class="text-4xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fa-solid fa-bullseye text-orange-500"></i> <!-- 靶心圖示 -->
+                        背景與動機
+                    </h3>
+                    <!-- 市場數據方塊 -->
+                    <div class="bg-slate-50 p-4 rounded-xl mb-4">
+                        <p class="text-2xl font-bold text-slate-700 mb-1">全球體育賽事市場規模</p>
+                        <p class="text-5xl font-black text-blue-900">4528 億美元</p>
+                        <p class="text-xl text-slate-500 mt-1 text-right">- 2024年數據</p>
+                    </div>
+                    <!-- 文字說明 -->
+                    <p class="text-2xl leading-relaxed text-slate-700 mb-4 text-justify">
+                        儘管市場龐大，但仍有 <span class="text-red-600 font-bold">90%</span> 的賽事因成本過高而無轉播服務。傳統轉播面臨「四重高牆」：
+                    </p>
+                    <!-- 四大高牆列表 -->
+                    <div class="bg-slate-100 rounded-xl p-3 border border-slate-200 text-center shadow-sm">
+                        <h4 class="text-lg font-bold text-slate-800 mb-1">
+                            專業轉播為什麼這麼難 <span class="text-orange-600">= 四重高牆金字塔</span>
+                        </h4>
+                        
+                        <div class="flex justify-center my-1">
+                            <img src="img0.png" alt="四重高牆金字塔" class="w-full h-auto max-h-[250px] object-contain">
+                        </div>
+                        
+                        <p class="text-lg font-bold text-blue-900 mt-1 bg-white inline-block px-4 py-1 rounded-full shadow-sm">
+                            四大高牆 = 90%賽事被忽視之原因
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 2-2. 核心解決方案區塊 (藍色邊框) -->
+                <div class="section-card p-6 border-l-8 border-blue-500 h-auto">
+                    <h3 class="text-4xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fa-solid fa-lightbulb text-blue-500"></i> <!-- 燈泡圖示 -->
+                        核心解決方案
+                    </h3>
+                    <p class="text-2xl leading-relaxed text-slate-700 mb-6 text-justify">
+                        利用<strong>LLM(大型語言模型)</strong> 結合<strong>CV(電腦視覺)</strong>，打造<span class="font-bold text-blue-700">虛擬運動賽事主播</span>。AI不再是未來，而是現在就可行的解方。
+                    </p>
+                    
+                    <!-- 四個小功能方塊 -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-50 p-4 rounded-xl text-center">
+                            <i class="fa-solid fa-brain text-4xl text-blue-600 mb-2"></i>
+                            <h4 class="text-xl font-bold">看懂比賽</h4>
+                            <p class="text-base text-slate-600 mt-1">客觀事件分析</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl text-center">
+                            <i class="fa-solid fa-microphone-lines text-4xl text-blue-600 mb-2"></i>
+                            <h4 class="text-xl font-bold">專業解說</h4>
+                            <p class="text-base text-slate-600 mt-1">風格化敘事生成</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl text-center">
+                            <i class="fa-solid fa-face-smile text-4xl text-blue-600 mb-2"></i>
+                            <h4 class="text-xl font-bold">帶動氣氛</h4>
+                            <p class="text-base text-slate-600 mt-1">情感語音</p>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-xl text-center">
+                            <i class="fa-solid fa-bolt text-4xl text-blue-600 mb-2"></i>
+                            <h4 class="text-xl font-bold">靈活應對</h4>
+                            <p class="text-base text-slate-600 mt-1">即時生成播報</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-card p-6 border-l-8 border-slate-700 flex-grow bg-slate-50">
+                    <h3 class="text-4xl font-bold mb-4 flex items-center gap-3 text-slate-800">
+                        <i class="fa-solid fa-terminal text-slate-700"></i>
+                        雙層提示工程策略
+                    </h3>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between items-end mb-1">
+                            <h4 class="text-xl font-bold text-blue-800"><i class="fa-solid fa-eye mr-2"></i>Layer 1: 客觀視覺分析</h4>
+                            <span class="text-xs font-mono bg-blue-100 text-blue-600 px-2 py-0.5 rounded">Prompt Engineering</span>
+                        </div>
+                        <div class="bg-[#1e1e1e] p-4 rounded-lg shadow-inner border border-slate-600 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 text-7xl text-white opacity-5 pointer-events-none rotate-12"><i class="fa-solid fa-robot"></i></div>
+                            
+                            <div class="code-font text-sm leading-relaxed">
+                                <p class="text-gray-400"># Role Definition</p>
+                                <p class="text-green-400">role = "不知疲倦的動作捕捉系統"</p>
+                                <p class="text-green-400">focus = ["關鍵動作", "競技狀態"]</p>
+                                <br>
+                                <p class="text-gray-400"># Strict Prohibitions</p>
+                                <p class="text-red-400">⛔️ 禁止腦補 (No Hallucination)</p>
+                                <p class="text-red-400">⛔️ 禁止提前收工 (No Early Stop)</p>
+                                <p class="text-blue-300">➜ 輸出：精確時間軸與動作分類</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-end mb-1">
+                            <h4 class="text-xl font-bold text-orange-700"><i class="fa-solid fa-microphone-alt mr-2"></i>Layer 2: 主觀敘事生成</h4>
+                            <span class="text-xs font-mono bg-orange-100 text-orange-600 px-2 py-0.5 rounded">Prompt Engineering</span>
+                        </div>
+                        <div class="bg-[#1e1e1e] p-4 rounded-lg shadow-inner border border-slate-600 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 text-7xl text-white opacity-5 pointer-events-none rotate-12"><i class="fa-solid fa-comment-dots"></i></div>
+
+                            <div class="code-font text-sm leading-relaxed">
+                                <p class="text-gray-400"># Persona Setting</p>
+                                <p class="text-yellow-400">role = "熱血且具戰術洞察的主播"</p>
+                                <p class="text-yellow-400">style = "拒絕平鋪直敘，強調因果"</p>
+                                <br>
+                                <p class="text-gray-400"># Narrative Rules</p>
+                                <p class="text-red-400">⛔️ 禁止流水帳 (No Flat List)</p>
+                                <p class="text-red-400">⛔️ 禁止未卜先知 (No Prediction)</p>
+                                <p class="text-orange-300">➜ 輸出：具備情緒與感染力的腳本</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 
+               【區域 3：中間欄位】(MIDDLE COLUMN) - 佔 40% 寬度，最重要的部分
+               內容：系統架構圖 (Step 1 ~ 4)
+            -->
+            <div class="col-span-5 flex flex-col gap-8">
+                
+                <div class="section-card p-8 border-t-8 border-blue-800 h-full">
+                    <h3 class="text-4xl font-bold mb-8 text-center">系統架構與技術流程</h3>
+                    
+                    <!-- 流程圖外框 -->
+                    <div class="relative bg-slate-50 p-8 rounded-2xl border border-slate-200">
+                        
+                        <!-- 步驟 1: 影像處理 -->
+                        <div class="flex items-center mb-8 relative z-10">
+                            <!-- 圓形數字 01 -->
+                            <div class="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shrink-0">
+                                01
+                            </div>
+                            <!-- 文字說明卡片 -->
+                            <div class="ml-6 bg-white p-6 rounded-xl shadow-md w-full border-l-4 border-slate-800">
+                                <h4 class="text-2xl font-bold text-slate-800 mb-2">影像處理階段</h4>
+                                <p class="text-xl text-slate-600">使用 <span class="bg-slate-200 px-2 rounded font-mono text-sm font-bold">MoviePy</span> 將長賽事影片切割為短片段，以便於後續分析。</p>
+                            </div>
+                        </div>
+
+                        <!-- 連接線 (灰色直線) -->
+                        <div class="absolute left-12 top-20 bottom-20 w-1 bg-slate-300 -z-0"></div>
+
+                        <!-- 步驟 2: Gemini 雙層語意 (最核心的部分) -->
+                        <div class="flex items-center mb-8 relative z-10">
+                            <div class="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shrink-0">
+                                02
+                            </div>
+                            <div class="ml-6 bg-white p-6 rounded-xl shadow-md w-full border-l-4 border-blue-600">
+                                <h4 class="text-2xl font-bold text-blue-600 mb-2">雙層語意生成 (Gemini)</h4>
+                                <div class="space-y-3">
+                                    <!-- 第一層分析 -->
+                                    <div class="bg-blue-50 p-3 rounded border border-blue-100">
+                                        <p class="text-lg font-bold text-blue-800">Layer 1: 客觀事件分析器</p>
+                                        <p class="text-lg text-slate-600">輸出JSON結構化資料，標記時間段、球員、動作與關鍵事件，同時要求實話實說，<span class="text-red-500 font-bold">嚴禁幻覺</span>。</p>
+                    <div class="mt-8 bg-[#1e1e1e] rounded-xl shadow-2xl overflow-hidden border border-gray-700">
+                        <!-- Terminal Header -->
+                        <div class="bg-[#2d2d2d] px-4 py-3 flex items-center gap-2 border-b border-gray-600 mac-dots">
+                            <span class="mac-red"></span>
+                            <span class="mac-yellow"></span>
+                            <span class="mac-green"></span>
+                            <div class="ml-4 text-gray-400 text-base font-mono">segment_001_event.json</div>
+                        </div>
+                        <!-- Code Content: 增加 p-6 內距，text-xl 加大字體 -->
+                        <div class="p-1">
+<pre class="code-font text-white text-1xl leading-relaxed overflow-hidden">
+<span class="text-sky-300">"start_time"</span>: <span class="text-orange-300">"0:02.0"</span>,
+<span class="text-sky-300">"end_time"</span>: <span class="text-orange-300">"0:04.0"</span>,
+<span class="text-sky-300">"player"</span>: <span class="text-orange-300">"Tan"</span>,
+<span class="text-sky-300">"action"</span>: <span class="text-orange-300">"正手發短球"</span>,
+<span class="text-sky-300">"detail"</span>: <span class="text-orange-300">"null"</span>,
+<span class="text-sky-300">"category"</span>: <span class="text-orange-300">"Serve"</span>,
+<span class="text-sky-300">"is_crucial"</span>: <span class="text-red-400">true</span>
+</pre>
+                        </div>
+                    </div>
+                                    </div>
+                                    <div class="text-center text-2xl text-slate-400">⬇</div>
+                                    <!-- 第二層生成 -->
+                                    <div class="bg-orange-50 p-3 rounded border border-orange-100">
+                                        <p class="text-lg font-bold text-orange-800">Layer 2: 專業敘事生成器</p>
+                                        <p class="text-lg text-slate-600">結合JSON數據與視覺細節，生成具備<span class="font-bold text-red-700">情感標籤</span>的播報腳本。</p>
+                                        <div class="mt-8 bg-[#1e1e1e] rounded-xl shadow-2xl overflow-hidden border border-gray-700">
+                                        <!-- Terminal Header -->
+                                            <div class="bg-[#2d2d2d] px-4 py-3 flex items-center gap-2 border-b border-gray-600 mac-dots">
+                                                <span class="mac-red"></span>
+                                                <span class="mac-yellow"></span>
+                                                <span class="mac-green"></span>
+                                                <div class="ml-4 text-gray-400 text-base font-mono">segment_001.json</div>
+                                            </div>
+                                            <!-- Code Content: 增加 p-6 內距，text-xl 加大字體 -->
+                                            <div class="p-1">
+<pre class="code-font text-white text-1xl leading-relaxed overflow-hidden">
+<span class="text-sky-300">"start_time"</span>: <span class="text-orange-300">"0:02.0"</span>,
+<span class="text-sky-300">"end_time"</span>: <span class="text-orange-300">"0:04.0"</span>,
+<span class="text-sky-300">"time_range"</span>: <span class="text-orange-300">"0:02.0"</span>,
+<span class="text-sky-300">"emotion"</span>: <span class="text-orange-300">"平穩"</span>,
+<span class="text-sky-300">"text"</span>: <span class="text-orange-300">"戴資穎準備發球！"</span>
+</pre>
+                                            </div>
+                                    </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 步驟 3: 語音播報 -->
+                        <div class="flex items-center mb-8 relative z-10">
+                            <div class="w-24 h-24 bg-indigo-600 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shrink-0">
+                                03
+                            </div>
+                            <div class="ml-6 bg-white p-6 rounded-xl shadow-md w-full border-l-4 border-indigo-600">
+                                <h4 class="text-2xl font-bold text-indigo-600 mb-2">語音播報 (TTS & SSML)</h4>
+
+                                                                    <!-- 第一層分析 -->
+                                    <div class="bg-blue-50 p-3 rounded border border-blue-100">
+                                        <p class="text-xl text-slate-600 mb-2">先將腳本轉換為 <strong>SSML (語音合成標記語言)</strong>。</p>
+                                        <div class="bg-indigo-900 text-white p-3 rounded font-mono text-lg">
+                                            Emotion: "激動" → Rate: 1.7, Volume: +3.5db
+                                        </div>                
+                                    </div>
+                                    <div class="text-center text-2xl text-slate-400">⬇</div>
+                                    <!-- 第二層生成 -->
+                                    <div class="bg-orange-50 p-3 rounded border border-orange-100">
+                                        <p class="text-xl text-slate-600 mb-2">再來把SSML轉成 <strong>TTS（Text-To-Speech）</strong>。</p>
+                                    </div>
+                            </div>
+                        </div>
+
+                        <!-- 步驟 4: 輸出 -->
+                        <div class="flex items-center relative z-10">
+                            <div class="w-24 h-24 bg-green-600 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg shrink-0">
+                                04
+                            </div>
+                            <div class="ml-6 bg-white p-6 rounded-xl shadow-md w-full border-l-4 border-green-600">
+                                <h4 class="text-2xl font-bold text-green-600 mb-2">影音混合與輸出</h4>
+                                <p class="text-xl text-slate-600">最後再用<span class="bg-slate-200 px-2 rounded font-mono text-sm font-bold">MoviePy</span>將語音與原影片根據時間軸進行對齊並合成，然後拼接為最終轉播影片。</p>
+                            </div>
+                        </div>
+                    </div>
+
+
+                </div>
+            </div>
+
+            <!-- 
+               【區域 4：右側欄位】(RIGHT COLUMN) - 佔 30% 寬度
+               內容：實作介面圖、關鍵技術亮點 (新位置)
+            -->
+            <div class="col-span-3 flex flex-col gap-8">
+                
+                <!-- 4-1. 系統介面展示區 (綠色邊框) -->
+                <div class="section-card p-8 border-l-8 border-green-500">
+                    <h3 class="text-4xl font-bold mb-6 flex items-center gap-3">
+                        <i class="fa-solid fa-laptop-code text-green-500"></i> <!-- 筆電圖示 -->
+                        系統實作與介面
+                    </h3>
+                    
+                    <div class="space-y-6">
+                        <!-- 模擬 UI 介面 (Mockup) -->
+                        <div class="bg-slate-100 rounded-lg p-4 border border-slate-300">
+                            <!-- 視窗按鈕 (紅黃綠) -->
+                            <div class="flex gap-2 mb-2">
+                                <div class="w-3 h-3 rounded-full bg-red-400"></div>
+                                <div class="w-3 h-3 rounded-full bg-yellow-400"></div>
+                                <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                            </div>
+                            <!-- 上傳區 -->
+                            <div class="bg-white h-32 rounded border border-slate-200 flex items-center justify-center mb-2">
+                                <span class="text-slate-400 font-bold text-xl"><i class="fa-solid fa-cloud-arrow-up mr-2"></i>上傳賽事影片</span>
+                            </div>
+                            <!-- 選項區 -->
+                            <div class="space-y-2">
+                                <div class="h-8 bg-white rounded border border-slate-200 px-2 flex items-center text-sm text-slate-500">選手描述: 紅衣日本, 藍衣馬來西亞...</div>
+                                
+                                <div class="h-10 bg-blue-600 rounded text-white flex items-center justify-center font-bold">開始生成</div>
+                            </div>
+                        </div>
+
+                        <!-- 生成文本展示 (模擬結果) -->
+                        <div class="bg-white p-4 rounded-lg shadow border-l-4 border-orange-400">
+                            <div class="text-sm font-bold text-slate-400 mb-1">生成的播報文本 (羽球)</div>
+                            <p class="text-lg text-slate-800 leading-snug">
+                                <span class="text-orange-600 font-bold">【激動】</span>馬來西亞隊的 Thinaah 抓住機會，一記重殺得分！
+                            </p>
+                            <p class="text-lg text-slate-800 leading-snug mt-2">
+                                <span class="text-blue-600 font-bold">【平穩】</span>日本隊緊密防守，滴水不漏。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4-2. 【移動後位置】關鍵技術亮點區塊 (深藍色/紫色邊框區分) -->
+                <div class="section-card p-6 border-l-8 border-indigo-500 flex-grow">
+                    <h3 class="text-4xl font-bold mb-6 flex items-center gap-3">
+                        <i class="fa-solid fa-star text-indigo-500"></i>
+                        關鍵技術亮點
+                    </h3>
+                    
+                    <div class="space-y-6">
+                        <!-- Item 1 -->
+                        <div class="highlight-item border-blue-500">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-2">1. 虛擬電腦視覺辨識</h4>
+                            <p class="text-xl text-slate-600 leading-snug">
+                                捨棄傳統電腦視覺的辨識，利用<span class="font-bold text-blue-700">獨特六合分析法</span>以及<span class="font-bold text-blue-700">大語言模型</span>將非結構化影像轉化為架構化的數據。
+                            </p>
+                        </div>
+
+                        <!-- Item 2 -->
+                        <div class="highlight-item border-indigo-500" style="border-color: #6366f1;">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-2">2. 背景說明機制</h4>
+                            <p class="text-xl text-slate-600 leading-snug">
+                                透過<span class="font-bold text-blue-700">事先輸入球員資訊(intro)</span>，解決LLM無法辨識特定身分的難題。
+                            </p>
+                        </div>
+
+                        <!-- Item 3 -->
+                        <div class="highlight-item border-purple-500" style="border-color: #a855f7;">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-2">3. 遞迴上下文記憶</h4>
+                            <p class="text-xl text-slate-600 leading-snug">
+                                透過<span class="font-bold text-blue-700">傳遞記憶緩衝(Context Buffer)</span>，確保解說內容的連貫性。
+                            </p>
+                        </div>
+
+                        <!-- Item 4 -->
+                        <div class="highlight-item border-pink-500" style="border-color: #ec4899;">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-2">4. 雙重參照的生成</h4>
+                            <p class="text-xl text-slate-600 leading-snug">
+                                <span class="font-bold text-blue-700">結合JSON事實數據與Video視覺細節</span> ，兼顧比分準確度與敘事感染力。
+                            </p>
+                        </div>
+
+                        <!-- Item 5 -->
+                        <div class="highlight-item border-green-500" style="border-color: #22c55e;">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-2">5. 擬真情緒語音</h4>
+                            <p class="text-xl text-slate-600 leading-snug">
+                                依賽事戰況<span class="font-bold text-blue-700">動態調整語速音量、音量</span>，自動生成呼吸氣口模擬真人節奏。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                                <!-- 2-3. 【移動後位置】效益總結區 (紫色邊框) -->
+                <div class="section-card p-6 border-l-8 border-purple-500 flex-grow">
+                    <h3 class="text-4xl font-bold mb-6 flex items-center gap-3">
+                        <i class="fa-solid fa-chart-line text-purple-500"></i> <!-- 圖表圖示 -->
+                        價值主張
+                    </h3>
+                    
+                        <!-- 價值主張列表 -->
+                        <div class="mt-4">
+                            <h4 class="text-2xl font-bold text-slate-800 mb-4"></h4>
+                            <ul class="space-y-3">
+                                <li class="flex items-center gap-3">
+                                    <i class="fa-solid fa-check-circle text-green-500 text-2xl"></i>
+                                    <span class="text-xl">降低轉播不平等</span>
+                                </li>
+                                <li class="flex items-center gap-3">
+                                    <i class="fa-solid fa-check-circle text-green-500 text-2xl"></i>
+                                    <span class="text-xl">多語系講評發展</span>
+                                </li>
+                                <li class="flex items-center gap-3">
+                                    <i class="fa-solid fa-check-circle text-green-500 text-2xl"></i>
+                                    <span class="text-xl">減少資訊落差</span>
+                                </li>
+                                <li class="flex items-center gap-3">
+                                    <i class="fa-solid fa-check-circle text-green-500 text-2xl"></i>
+                                    <span class="text-xl">提升運動賽事普及度</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 
+           【區域 5：底部區域】(Footer)
+           包含：團隊成員名單、學校 Logo
+        -->
+
+
+    </div>
+
+</body>
+</html>
+

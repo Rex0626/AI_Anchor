@@ -15,7 +15,7 @@ cred_path = os.path.join(PROJECT_ROOT, "credentials", "ai-anchor-462506-7887b710
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = cred_path
 
 # ========== 2. 關鍵參數 ==========
-SYLLABLES_PER_SEC = 4.5      
+SYLLABLES_PER_SEC = 4.0      
 MIN_EVENT_DURATION = 1.0      
 MAX_RALLY_DURATION = 4.5
 MIN_GAP_DURATION = 3.0        
@@ -470,6 +470,14 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
         if final_end <= final_start: final_end = final_start + 0.5 
         final_dur = final_end - final_start
 
+        if final_dur > 0.1:
+            speed_val = estimated_dur / final_dur
+        else:
+            speed_val = 1.0
+
+        # 限制範圍：最慢 1.0倍，最快 2.0倍
+        speed_val = round(max(1.0,min(speed_val,2.0)),2)
+
         # 情緒判斷
         emotion = "平穩" 
         content_lower = task["raw_content"].lower()
@@ -488,6 +496,7 @@ def process_single_video_stage2(video_path, event_json_path, output_folder):
             "start_time": seconds_to_timecode(final_start),
             "end_time": seconds_to_timecode(final_end),
             "time_range": format_duration(final_dur),
+            "speed": speed_val,
             "emotion": emotion,
             "text": text
         })

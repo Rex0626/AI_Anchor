@@ -1,25 +1,41 @@
-# 🎙️ 賽場之聲 - 多模態融合即時賽事解說平台
+# 🏆 賽場揚聲 (Sound of the Stadium): 多模態融合的即時賽事解說平台
 
-## 專案總覽 (Project Overview)
+> [cite_start]**國立高雄大學 資訊工程學系 115級 畢業專題** [cite: 8]
+>
+> [cite_start]**專題題目**：賽場揚聲：多模態融合的即時賽事解說平台 [cite: 10, 11]
+> [cite_start]**指導老師**：洪宗貝 講座教授 [cite: 20]
 
-本專案是一個創新的**多模態 AI 賽事解說平台**，旨在將運動賽事影片自動化轉換為專業的文字解說與富有情感的語音播報。
+## 📖 專案簡介 (Introduction)
+
+[cite_start]本專案旨在建立一套以**多模態人工智慧 (Multimodal AI)** 為核心的賽事解說內容自動生成平台 [cite: 24][cite_start]。針對體育轉播製作成本高昂、非主流賽事內容匱乏，以及視障群體資訊落差等問題 [cite: 24, 37, 38]，我們提出了解決方案。
+
+[cite_start]不同於傳統依賴大量標註數據訓練的電腦視覺模型，本研究創新地採用 **Google Gemini** 等多模態大型語言模型 (MM-LLMs) 進行**虛擬視覺感知**，並結合 **Google Cloud TTS** 實現情緒化語音合成 [cite: 46, 52, 59]。
+
+## 💡 核心創新：為何不使用傳統電腦視覺？
+
+在本專案的研究過程中，我們深入探討了兩種技術路徑：
+
+1.  [cite_start]**傳統電腦視覺 (Traditional CV)**：使用 YOLO 與 DeepSORT 進行物件偵測與追蹤。雖然精確，但在動作語意理解上存在「語意鴻溝 (Semantic Gap)」，且訓練特定動作辨識模型成本極高 [cite: 41, 42, 66]。
+2.  [cite_start]**多模態大模型 (Multimodal LLM)**：本專案最終採用的方案。利用 LLM 的零樣本 (Zero-shot) 推理能力，直接從畫面中理解複雜戰術與因果關係，無需針對每一種運動重新訓練模型 [cite: 46, 52, 68, 69]。
+
+> [cite_start]**⚠️ 程式碼說明**：本專案雖然主要採用 LLM 路徑，但在程式庫中仍保留了基於 YOLOv8 與 MediaPipe 的實作代碼，這部分僅作為**研究過程中的效能對照與實驗用途**，以驗證不同技術路線的優劣 [cite: 66, 96]。
+
+## ✨ 系統特色 (Key Features)
+
+* [cite_start]**虛擬視覺感知 (Virtual Visual Perception)**：利用 Prompt Engineering 讓 LLM 扮演視覺感測器，輸出結構化事件日誌 [cite: 52, 89]。
+* [cite_start]**感知-推理解耦 (Perception-Reasoning Decoupling)**：採用雙層架構，先客觀感知、後主觀敘事，有效抑制 AI 幻覺 [cite: 53, 56, 74]。
+* [cite_start]**情緒化語音合成**：將「激動」、「遺憾」等情緒標籤動態映射為語速與音量參數，模擬真人主播 [cite: 28, 132, 133]。
+* [cite_start]**外部資訊注入**：動態注入球員背景資訊，解決通用模型無法識別特定球員的問題 [cite: 60, 100]。
+
+## 👥 製作團隊 (Team Members)
+
+| 學號 | 姓名 | 負責項目 |
+| :--- | :--- | :--- |
+| A1115509 | 譚毅軒 | [cite_start]技術負責人、後端架構規劃、Prompt 工程 [cite: 167] |
+| A1115510 | 陳昱揚 | [cite_start]視覺 AI 工程師 (YOLO/DeepSORT 對照組研究) [cite: 167] |
+| A1115534 | 林吟蓁 | [cite_start]視覺 AI 工程師 (人物辨識算法研究) [cite: 169] |
+| A1115535 | 游彥宸 | [cite_start]系統介面負責人、Live API 研究 [cite: 169] |
+| A1115511 | 瞿祖侑 | [cite_start]專案助手 [cite: 169] |
 
 ---
-
-### 📦 專案結構與模組職責
-
-| 資料夾 | 職責 | 核心技術 |
-|---|---|---|
-| `backend/` | **AI 核心後段模組**：負責影片處理、視覺分析、LLM 旁白生成、TTS 語音合成及影片最終合併。 | Python, YOLOv8, Gemini LLM |
-| `frontend/` | **使用者介面**：預留給網頁、應用程式或操作介面。 | [待定：React/Vue/etc.] |
-| `Live/` | **及時處理模組**：預留給及時處理的部分。 | [待定：Live API] |
-| `tools/` | **輔助工具**：例如影片下載工具等。 | |
-
----
-
-### 🚀 快速入門 (Quick Start for All Team Members)
-
-1. **複製專案**：
-   ```bash
-   git clone [https://github.com/Rex0626/AI_Anchor](https://github.com/Rex0626/AI_Anchor)_
-   cd AI_Anchor
+[cite_start]© 2025 國立高雄大學 資訊工程學系 [cite: 8]
